@@ -1109,24 +1109,25 @@ function OrdersView({ deliveries = [], setActiveTab, setPosInitialAction }) {
   // Cancel order state
   const [cancellingIds, setCancellingIds] = useState([]);
 
-  const handleCancelOrder = async (e, orderId) => {
+  const handleCancelOrder = (e, orderId) => {
     e.stopPropagation();
     if (!confirm('¿Estás seguro de cancelar esta orden? El inventario será liberado inmediatamente.')) return;
     
     setCancellingIds(prev => [...prev, orderId]);
     
-    try {
-      await axios.post(route('logistics.cancel', orderId));
-      setTimeout(() => {
-        router.reload({ preserveScroll: true, onSuccess: () => {
+    router.post(route('logistics.cancel', orderId), {}, {
+      preserveScroll: true,
+      onSuccess: () => {
+        // La animación fade-out se mantiene por el ID en cancellingIds
+        setTimeout(() => {
           setCancellingIds(prev => prev.filter(id => id !== orderId));
-        }});
-      }, 500);
-    } catch (error) {
-      setCancellingIds(prev => prev.filter(id => id !== orderId));
-      console.error(error);
-      alert('Error al cancelar el pedido.');
-    }
+        }, 500);
+      },
+      onError: () => {
+        setCancellingIds(prev => prev.filter(id => id !== orderId));
+        alert('Error al cancelar el pedido.');
+      }
+    });
   };
 
   // Order Details Modal
@@ -1280,10 +1281,10 @@ function OrdersView({ deliveries = [], setActiveTab, setPosInitialAction }) {
                           <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{orderIdStr}</span>
                           <button 
                             onClick={(e) => handleCancelOrder(e, order.id)}
-                            className="bg-red-50 text-red-500 hover:bg-red-100 p-1 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                            className="bg-red-50 text-red-500 hover:bg-red-600 hover:text-white p-1.5 rounded-full opacity-60 group-hover:opacity-100 transition-all shadow-sm flex items-center justify-center"
                             title="Cancelar Pedido"
                           >
-                            <XCircle className="w-3.5 h-3.5" />
+                            <XCircle className="w-4 h-4" />
                           </button>
                         </div>
                         <span className="text-xs text-slate-400 flex items-center"><Clock className="w-3 h-3 mr-1" /> {new Date(order.created_at).toLocaleDateString()}</span>

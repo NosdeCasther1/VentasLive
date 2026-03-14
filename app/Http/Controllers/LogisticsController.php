@@ -13,7 +13,7 @@ class LogisticsController extends Controller
      * Cancela una orden y libera el inventario reservado.
      *
      * @param  \App\Models\Sale  $sale
-     * @return \Illuminate\Http\JsonResponse
+     * @return \Illuminate\Http\RedirectResponse
      */
     public function cancelOrder(Sale $sale)
     {
@@ -53,15 +53,10 @@ class LogisticsController extends Controller
                     }
                 }
 
-                return response()->json([
-                    'message' => 'Pedido cancelado con éxito. El inventario ha sido liberado.',
-                    'sale_id' => $sale->id
-                ]);
+                return redirect()->back()->with('success', 'Pedido cancelado con éxito. El inventario ha sido liberado.');
             });
         } catch (\Exception $e) {
-            return response()->json([
-                'error' => 'Error al cancelar el pedido: ' . $e->getMessage()
-            ], 500);
+            return redirect()->back()->withErrors(['error' => 'Error al cancelar el pedido: ' . $e->getMessage()]);
         }
     }
 }
