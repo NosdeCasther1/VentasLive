@@ -325,6 +325,7 @@ function LiveView({ products }) {
     payment_status: 'Pago Contra Entrega'
   });
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
+  const [cancellingIds, setCancellingIds] = useState([]);
 
   const handleOpenCheckout = (bag) => {
     setCheckoutBag(bag);
@@ -456,11 +457,41 @@ function LiveView({ products }) {
       
       if (response.status === 200) {
         const data = response.data;
-        setBags(bags.map(b => b.id === data.bag.id ? data.bag : b).filter(b => b.details.length > 0));
+        const updatedBag = data.bag;
+        
+        if (updatedBag.details.length === 0) {
+          // Si la bolsa queda vacía, la eliminamos de la lista
+          setBags(bags.filter(b => b.id !== updatedBag.id));
+          setViewingBag(null);
+        } else {
+          setBags(bags.map(b => b.id === updatedBag.id ? updatedBag : b));
+          if (viewingBag?.id === updatedBag.id) setViewingBag(updatedBag);
+        }
       }
     } catch (error) {
       console.error("Error removing item:", error);
       alert(error.response?.data?.error || "Error al eliminar el artículo");
+    }
+  };
+
+  const handleCancelBag = async (saleId) => {
+    if(!confirm("¿Deseas CANCELAR esta bolsa por completo? Todos los artículos volverán al inventario.")) return;
+    
+    setCancellingIds(prev => [...prev, saleId]);
+    
+    try {
+      const response = await axios.post(route('live.cancelBag', saleId));
+      if (response.status === 200) {
+        setTimeout(() => {
+          setBags(bags.filter(b => b.id !== saleId));
+          setViewingBag(null);
+          setCancellingIds(prev => prev.filter(id => id !== saleId));
+        }, 500);
+      }
+    } catch (error) {
+      setCancellingIds(prev => prev.filter(id => id !== saleId));
+      console.error("Error cancelling bag:", error);
+      alert(error.response?.data?.error || "Error al cancelar la bolsa");
     }
   };
 
@@ -627,7 +658,7 @@ function LiveView({ products }) {
               </div>
             )}
             {!isLoadingBags && bags.map(bag => (
-              <div key={bag.id} className="group border border-slate-200 rounded-xl p-4 flex items-center justify-between hover:border-indigo-400 hover:shadow-md transition-all bg-slate-50/50 hover:bg-white">
+              <div key={bag.id} className={`group border border-slate-200 rounded-xl p-4 flex items-center justify-between transition-all bg-slate-50/50 hover:bg-white hover:border-indigo-400 hover:shadow-md ${cancellingIds.includes(bag.id) ? 'opacity-0 scale-95 pointer-events-none' : ''}`}>
                 <div className="flex items-center space-x-4">
                   <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-full text-white shadow-indigo-200 shadow-lg group-hover:scale-110 transition-transform">
                     <User className="w-6 h-6" />
@@ -659,6 +690,12 @@ function LiveView({ products }) {
                       className="bg-white border border-slate-200 hover:border-indigo-300 hover:text-indigo-600 text-slate-600 px-5 py-2 rounded-lg text-sm font-bold transition-all shadow-sm"
                     >
                       Ver detalle
+                    </button>
+                    <button 
+                      onClick={() => handleCancelBag(bag.id)}
+                      className="text-red-400 hover:text-red-600 text-xs font-bold pt-1 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                    >
+                      <XCircle className="w-3 h-3 mr-1" /> Cancelar Bolsa
                     </button>
                   </div>
                 </div>
@@ -723,12 +760,20 @@ function LiveView({ products }) {
                 <p className="text-xs text-slate-400 font-bold uppercase">Total Acumulado</p>
                 <p className="text-2xl font-bold text-indigo-700">Q {parseFloat(viewingBag.total).toFixed(2)}</p>
               </div>
-              <button 
-                onClick={() => setViewingBag(null)}
-                className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700"
-              >
-                Cerrar Detalle
-              </button>
+              <div className="flex space-x-3">
+                <button 
+                  onClick={() => handleCancelBag(viewingBag.id)}
+                  className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg font-bold hover:bg-red-100 transition-colors flex items-center"
+                >
+                  <XCircle className="w-4 h-4 mr-2" /> Cancelar Bolsa
+                </button>
+                <button 
+                  onClick={() => setViewingBag(null)}
+                  className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700"
+                >
+                  Cerrar Detalle
+                </button>
+              </div>
             </div>
           </div>
         </div>

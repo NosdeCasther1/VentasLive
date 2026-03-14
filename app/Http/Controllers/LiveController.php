@@ -234,4 +234,31 @@ class LiveController extends Controller
             return response()->json(['error' => 'Error procesando la solicitud: ' . $e->getMessage()], 500);
         }
     }
+    public function cancelBag(Sale $sale)
+    {
+        if ($sale->status !== 'live_draft') {
+            return response()->json(['error' => 'Solo se pueden cancelar bolsas en estado borrador'], 422);
+        }
+
+        try {
+            return DB::transaction(function () use ($sale) {
+                $sale->load('details.productVariant');
+
+                foreach ($sale->details as $detail) {
+                    $variant = $detail->productVariant;
+                    if ($variant) {
+                        // Revert inventory: stock + quantity, reserved - quantity
+                        $variant->increment('stock', $detail->quantity);
+                        $variant->decrement('reserved', $detail->quantity);
+                    }
+                }
+
+                $sale->delete(); // Eliminar la bolsa por completo
+
+                return response()->json(['message' => 'Bolsa cancelada e inventario liberado']);
+            });
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Error al cancelar la bolsa: ' . $e->getMessage()], 500);
+        }
+    }
 }
