@@ -25,6 +25,8 @@ Route::middleware(['auth'])->group(function () {
     Route::middleware(['check.register'])->group(function () {
         // Audit and Reports
         Route::get('products/count-sheet', [\App\Http\Controllers\ProductController::class, 'countSheet'])->name('products.count-sheet');
+        Route::post('products/adjust-stock', [\App\Http\Controllers\ProductController::class, 'adjustStock'])->name('products.adjust-stock');
+        Route::get('api/products/adjustments', [\App\Http\Controllers\ProductController::class, 'adjustmentHistory'])->name('api.products.adjustments');
         Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
         Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
 

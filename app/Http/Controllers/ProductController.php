@@ -100,15 +100,58 @@ class ProductController extends Controller
         return redirect()->back()->with('success', 'Producto eliminado correctamente.');
     }
 
-    public function countSheet()
+    public function countSheet(Request $request)
     {
-        $variants = ProductVariant::with('product')
+        $query = ProductVariant::with('product')
             ->join('products', 'product_variants.product_id', '=', 'products.id')
-            ->select('product_variants.*')
-            ->orderBy('products.name')
-            ->get();
+            ->select('product_variants.*');
+
+        if ($request->filled('category') && $request->category !== 'all') {
+            $query->where('products.category_id', $request->category);
+        }
+
+        $variants = $query->orderBy('products.name')->get();
 
         $pdf = Pdf::loadView('reports.inventory-count', compact('variants'));
         return $pdf->stream('Hoja_Conteo_Inventario.pdf');
+    }
+
+    public function adjustStock(Request $request)
+    {
+        $request->validate([
+            'product_variant_id' => 'required|exists:product_variants,id',
+            'type' => 'required|in:addition,subtraction',
+            'quantity' => 'required|integer|min:1',
+            'reason' => 'required|string|max:255',
+        ]);
+
+        $variant = ProductVariant::findOrFail($request->product_variant_id);
+        
+        // Create audit record
+        \App\Models\InventoryAdjustment::create([
+            'product_variant_id' => $variant->id,
+            'user_id' => auth()->id(),
+            'type' => $request->type,
+            'quantity' => $request->quantity,
+            'reason' => $request->reason,
+        ]);
+
+        // Update stock
+        if ($request->type === 'addition') {
+            $variant->increment('stock', $request->quantity);
+        } else {
+            $variant->decrement('stock', $request->quantity);
+        }
+
+        return redirect()->back()->with('success', 'Ajuste de inventario realizado correctamente.');
+    }
+
+    public function adjustmentHistory()
+    {
+        $adjustments = \App\Models\InventoryAdjustment::with(['variant.product', 'user'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+            
+        return response()->json($adjustments);
     }
 }

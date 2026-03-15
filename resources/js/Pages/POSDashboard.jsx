@@ -39,7 +39,9 @@ import {
   BellRing,
   Wallet,
   Printer,
-  FileSpreadsheet
+  FileSpreadsheet,
+  History,
+  MinusCircle
 } from 'lucide-react';
 import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -1100,7 +1102,21 @@ function InventoryView({ products, categories, suppliers }) {
   const [editingProduct, setEditingProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedCategoryForCountSheet, setSelectedCategoryForCountSheet] = useState('all');
   const [expandedRows, setExpandedRows] = useState({});
+  
+  const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
+  const [selectedVariantForAdjustment, setSelectedVariantForAdjustment] = useState(null);
+  const [isAdjustmentHistoryModalOpen, setIsAdjustmentHistoryModalOpen] = useState(false);
+  const [adjustmentHistory, setAdjustmentHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  const adjustmentForm = useForm({
+    product_variant_id: '',
+    type: 'addition',
+    quantity: '',
+    reason: ''
+  });
 
   const toggleRow = (id) => setExpandedRows(prev => ({...prev, [id]: !prev[id]}));
 
@@ -1109,6 +1125,40 @@ function InventoryView({ products, categories, suppliers }) {
   });
   const { data, setData, post, put, processing, reset } = productForm;
   const destroy = productForm.delete;
+
+  const openAdjustmentModal = (v, p) => {
+    setSelectedVariantForAdjustment({ ...v, product_name: p.name });
+    adjustmentForm.setData({
+        product_variant_id: v.id,
+        type: 'addition',
+        quantity: '',
+        reason: ''
+    });
+    setIsAdjustmentModalOpen(true);
+  };
+
+  const handleAdjustmentSubmit = (e) => {
+    e.preventDefault();
+    adjustmentForm.post(route('products.adjust-stock'), {
+        onSuccess: () => {
+            setIsAdjustmentModalOpen(false);
+            adjustmentForm.reset();
+        }
+    });
+  };
+
+  const fetchAdjustmentHistory = async () => {
+    setLoadingHistory(true);
+    try {
+        const response = await axios.get(route('api.products.adjustments'));
+        setAdjustmentHistory(response.data);
+        setIsAdjustmentHistoryModalOpen(true);
+    } catch (error) {
+        console.error("Error fetching history", error);
+    } finally {
+        setLoadingHistory(false);
+    }
+  };
 
   const generateRandomSKU = () => 'VAR-' + Math.random().toString(36).substr(2, 6).toUpperCase();
 
@@ -1176,11 +1226,31 @@ function InventoryView({ products, categories, suppliers }) {
             <input type="text" placeholder="Buscar por código o nombre..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-indigo-500 outline-none w-64 shadow-sm transition-all" />
           </div>
         </div>
-        <div className="flex space-x-3">
-           <a href={route('products.count-sheet')} target="_blank" className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-colors shadow-sm">
-             <span className="mr-2">🖨️</span> Hoja de Conteo
-           </a>
-           <button onClick={() => setIsPurchaseModalOpen(true)} className="flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
+        <div className="flex space-x-3 items-center">
+            <div className="flex items-center bg-white border border-slate-300 rounded-lg shadow-sm">
+                <span className="px-3 text-slate-400"><Filter className="w-4 h-4" /></span>
+                <select 
+                    value={selectedCategoryForCountSheet}
+                    onChange={(e) => setSelectedCategoryForCountSheet(e.target.value)}
+                    className="pr-4 py-2 bg-transparent text-sm font-medium text-slate-700 outline-none border-none min-w-[150px]"
+                >
+                    <option value="all">Todas las Categorías</option>
+                    {categories.map(cat => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                    ))}
+                </select>
+            </div>
+            <a 
+                href={route('products.count-sheet', { category: selectedCategoryForCountSheet })} 
+                target="_blank" 
+                className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-all shadow-sm active:scale-95"
+            >
+              <Printer className="w-4 h-4 mr-2" /> Hoja de Conteo
+            </a>
+            <button onClick={fetchAdjustmentHistory} className="flex items-center px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors shadow-sm border border-slate-300">
+              <History className="w-4 h-4 mr-2" /> Historial
+            </button>
+            <button onClick={() => setIsPurchaseModalOpen(true)} className="flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
              <PlusCircle className="w-4 h-4 mr-2" /> Ingresar Compra
            </button>
            <button onClick={openAddModal} className="flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
@@ -1222,17 +1292,36 @@ function InventoryView({ products, categories, suppliers }) {
                     <tr className="bg-slate-50/50">
                       <td colSpan="6" className="p-0 border-b border-indigo-100">
                          <div className="px-14 py-4 bg-indigo-50/30">
-                           <table className="w-full text-sm text-left">
-                             <thead><tr className="text-slate-500 border-b border-slate-200"><th className="pb-2 font-medium">SKU</th><th className="pb-2 font-medium">Variante (Talla/Color)</th><th className="pb-2 font-medium text-right">Precio Venta (Q)</th><th className="pb-2 font-medium text-right">Costo Promedio (Q)</th><th className="pb-2 font-medium text-center">Stock</th><th className="pb-2 font-medium text-center">Apartados</th></tr></thead>
+                              <table className="w-full text-sm text-left border-separate border-spacing-0">
+                             <thead>
+                                <tr className="text-slate-500 border-b border-slate-200 text-[10px] uppercase tracking-wider font-bold">
+                                    <th className="pb-2 border-b border-slate-200">SKU</th>
+                                    <th className="pb-2 border-b border-slate-200">Variante</th>
+                                    <th className="pb-2 border-b border-slate-200 text-right">Precio</th>
+                                    <th className="pb-2 border-b border-slate-200 text-right">Costo</th>
+                                    <th className="pb-2 border-b border-slate-200 text-center">Stock</th>
+                                    <th className="pb-2 border-b border-slate-200 text-center">Res.</th>
+                                    <th className="pb-2 border-b border-slate-200 text-right">Ajuste</th>
+                                </tr>
+                             </thead>
                              <tbody>
                                {p.variants.map(v => (
-                                 <tr key={v.id} className="border-b border-slate-100 last:border-0 hover:bg-white">
-                                   <td className="py-2 font-mono text-xs text-slate-600">{v.sku}</td>
-                                   <td className="py-2"><span className="font-medium text-slate-800">{v.size || 'N/A'}</span> / <span className="text-slate-600">{v.color || 'N/A'}</span></td>
-                                   <td className="py-2 text-right font-bold text-indigo-600">{parseFloat(v.selling_price).toFixed(2)}</td>
-                                   <td className="py-2 text-right text-slate-500">{parseFloat(v.average_cost).toFixed(2)}</td>
-                                   <td className="py-2 text-center">{v.stock <= 0 ? <span className="text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded text-xs">Ag.</span> : <span className="font-bold">{v.stock}</span>}</td>
-                                   <td className="py-2 text-center text-amber-600">{v.reserved}</td>
+                                 <tr key={v.id} className="border-b border-slate-100 last:border-0 hover:bg-white transition-colors">
+                                   <td className="py-2.5 font-mono text-xs text-slate-500">{v.sku}</td>
+                                   <td className="py-2.5"><span className="font-semibold text-slate-700">{v.size || 'N/A'}</span> <span className="text-slate-400 mx-1">|</span> <span className="text-slate-500">{v.color || 'N/A'}</span></td>
+                                   <td className="py-2.5 text-right font-bold text-indigo-600">{parseFloat(v.selling_price).toFixed(2)}</td>
+                                   <td className="py-2.5 text-right text-slate-500">{parseFloat(v.average_cost).toFixed(2)}</td>
+                                   <td className="py-2.5 text-center">{v.stock <= 0 ? <span className="text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded text-[10px] uppercase">Agotado</span> : <span className="font-bold text-slate-700">{v.stock}</span>}</td>
+                                   <td className="py-2.5 text-center text-amber-600 font-medium">{v.reserved}</td>
+                                   <td className="py-2.5 text-right">
+                                        <button 
+                                            onClick={(e) => { e.stopPropagation(); openAdjustmentModal(v, p); }}
+                                            className="p-1 px-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-all border border-transparent hover:border-amber-200 shadow-sm active:scale-95 flex items-center float-right"
+                                            title="Ajustar Stock"
+                                        >
+                                            <Settings className="w-4 h-4" />
+                                        </button>
+                                   </td>
                                  </tr>
                                ))}
                              </tbody>
@@ -1247,6 +1336,148 @@ function InventoryView({ products, categories, suppliers }) {
           </tbody>
         </table>
       </div>
+
+      {/* MODAL DE AJUSTE */}
+      {isAdjustmentModalOpen && selectedVariantForAdjustment && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="px-6 py-4 bg-amber-50 border-b border-amber-100 flex justify-between items-center">
+              <div>
+                <h3 className="font-bold text-amber-900 flex items-center text-lg">
+                    <Settings className="w-5 h-5 mr-2" /> Ajuste de Inventario
+                </h3>
+                <p className="text-xs text-amber-700 font-medium">{selectedVariantForAdjustment.product_name} ({selectedVariantForAdjustment.size} / {selectedVariantForAdjustment.color})</p>
+              </div>
+              <button onClick={() => setIsAdjustmentModalOpen(false)} className="text-amber-400 hover:text-amber-600 transition-colors bg-white/50 p-1 rounded-full"><Plus className="w-5 h-5 rotate-45" /></button>
+            </div>
+            <form onSubmit={handleAdjustmentSubmit} className="p-6 space-y-5">
+              <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 flex justify-between items-center">
+                <span className="text-sm text-slate-500">Stock Actual:</span>
+                <span className="text-lg font-bold text-slate-800">{selectedVariantForAdjustment.stock}</span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Tipo de Ajuste</label>
+                <div className="grid grid-cols-2 gap-3">
+                    <button 
+                        type="button" 
+                        onClick={() => adjustmentForm.setData('type', 'addition')}
+                        className={`flex items-center justify-center py-3 rounded-xl border-2 transition-all ${adjustmentForm.data.type === 'addition' ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}
+                    >
+                        <PlusCircle className="w-5 h-5 mr-2" /> <span className="font-bold">Suma (+)</span>
+                    </button>
+                    <button 
+                        type="button" 
+                        onClick={() => adjustmentForm.setData('type', 'subtraction')}
+                        className={`flex items-center justify-center py-3 rounded-xl border-2 transition-all ${adjustmentForm.data.type === 'subtraction' ? 'bg-red-50 border-red-500 text-red-700 shadow-sm' : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'}`}
+                    >
+                        <MinusCircle className="w-5 h-5 mr-2" /> <span className="font-bold">Resta (-)</span>
+                    </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Cantidad a Ajustar</label>
+                <input 
+                    type="number" 
+                    value={adjustmentForm.data.quantity} 
+                    onChange={e => adjustmentForm.setData('quantity', e.target.value)} 
+                    required 
+                    min="1"
+                    placeholder="Eje: 5"
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner" 
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2 tracking-wider">Motivo del Ajuste</label>
+                <textarea 
+                    value={adjustmentForm.data.reason} 
+                    onChange={e => adjustmentForm.setData('reason', e.target.value)} 
+                    required 
+                    rows="3"
+                    placeholder="Ej. Producto dañado, Error de conteo físico..."
+                    className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all shadow-inner resize-none"
+                />
+              </div>
+
+              <div className="pt-2 flex space-x-3">
+                <button type="button" onClick={() => setIsAdjustmentModalOpen(false)} className="px-5 py-3 text-slate-500 font-bold hover:text-slate-700 transition-colors">Cancelar</button>
+                <button 
+                    type="submit" 
+                    disabled={adjustmentForm.processing} 
+                    className={`flex-1 py-3 rounded-xl text-white font-bold shadow-lg transition-all active:scale-95 ${adjustmentForm.data.type === 'addition' ? 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200' : 'bg-red-600 hover:bg-red-700 shadow-red-200'}`}
+                >
+                    {adjustmentForm.processing ? 'Procesando...' : 'Confirmar Ajuste'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE HISTORIAL */}
+      {isAdjustmentHistoryModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl max-h-[85vh] overflow-hidden flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <div className="px-8 py-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center shrink-0">
+               <div className="flex items-center">
+                  <div className="bg-indigo-100 p-2 rounded-lg mr-4">
+                    <History className="w-6 h-6 text-indigo-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-black text-slate-800 text-xl tracking-tight">Historial de Ajustes</h3>
+                    <p className="text-sm text-slate-500 font-medium">Registro de auditoría de movimientos manuales</p>
+                  </div>
+               </div>
+               <button onClick={() => setIsAdjustmentHistoryModalOpen(false)} className="bg-white border border-slate-200 text-slate-400 hover:text-red-500 p-2 rounded-xl transition-all shadow-sm"><Plus className="w-6 h-6 rotate-45" /></button>
+            </div>
+            <div className="flex-1 overflow-auto p-8">
+               <table className="w-full text-left">
+                 <thead>
+                    <tr className="text-slate-400 text-[11px] uppercase tracking-widest font-bold border-b-2 border-slate-100 italic">
+                        <th className="pb-4">Fecha</th>
+                        <th className="pb-4">Producto</th>
+                        <th className="pb-4">Variante</th>
+                        <th className="pb-4">Tipo</th>
+                        <th className="pb-4">Usuario</th>
+                        <th className="pb-4">Motivo</th>
+                    </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100">
+                    {adjustmentHistory.length > 0 ? adjustmentHistory.map(adj => (
+                        <tr key={adj.id} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="py-4 whitespace-nowrap">
+                                <span className="block font-bold text-slate-700">{new Date(adj.created_at).toLocaleDateString()}</span>
+                                <span className="text-[10px] text-slate-400">{new Date(adj.created_at).toLocaleTimeString()}</span>
+                            </td>
+                            <td className="py-4 font-bold text-indigo-700">{adj.variant?.product?.name}</td>
+                            <td className="py-4">
+                                <span className="bg-slate-100 px-2 py-1 rounded text-xs font-bold text-slate-600">{adj.variant?.size || 'N/A'} / {adj.variant?.color || 'N/A'}</span>
+                            </td>
+                            <td className="py-4">
+                                <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-black uppercase tracking-tighter ${adj.type === 'addition' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
+                                    {adj.type === 'addition' ? <Plus className="w-3 h-3 mr-1" /> : <Minus className="w-3 h-3 mr-1" />}
+                                    {adj.quantity} unid.
+                                </span>
+                            </td>
+                            <td className="py-4 text-slate-600 font-medium">
+                                <div className="flex items-center">
+                                    <div className="w-6 h-6 bg-indigo-50 text-indigo-500 rounded-full flex items-center justify-center text-[10px] font-bold mr-2 uppercase">{adj.user?.name?.charAt(0)}</div>
+                                    {adj.user?.name}
+                                </div>
+                            </td>
+                            <td className="py-4 italic text-slate-500 max-w-xs truncate" title={adj.reason}>"{adj.reason}"</td>
+                        </tr>
+                    )) : (
+                        <tr><td colSpan="6" className="py-20 text-center"><div className="flex flex-col items-center"><History className="w-12 h-12 text-slate-200 mb-3" /><p className="text-slate-400 font-medium italic">No hay registros de ajustes aún.</p></div></td></tr>
+                    )}
+                 </tbody>
+               </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
