@@ -980,6 +980,7 @@ function LiveView({ products }) {
 
 // 3. INVENTARIO VIEW
 function InventoryView({ products, categories, suppliers }) {
+  const emptyVariant = { sku: '', size: '', color: '', reference_cost: '', margin: '', selling_price: '' };
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
