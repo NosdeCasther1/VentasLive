@@ -240,16 +240,13 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
                   <UserCircle className="w-4 h-4 mr-3 text-slate-400" />
                   Mi Perfil
                 </Link>
-                <form method="POST" action={route('logout')} className="w-full">
-                  <input type="hidden" name="_token" value={document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')} />
-                  <button 
-                    type="submit"
-                    className="w-full flex items-center px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-slate-100"
-                  >
-                    <LogOut className="w-4 h-4 mr-3 text-red-500" />
-                    Cerrar Sesión
-                  </button>
-                </form>
+                <button 
+                  onClick={() => router.post(route('logout'))}
+                  className="w-full flex items-center px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-slate-100"
+                >
+                  <LogOut className="w-4 h-4 mr-3 text-red-500" />
+                  Cerrar Sesión
+                </button>
               </div>
             </>
           )}
