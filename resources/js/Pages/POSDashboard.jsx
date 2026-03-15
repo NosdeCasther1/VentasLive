@@ -1101,8 +1101,7 @@ function InventoryView({ products, categories, suppliers }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedCategoryForCountSheet, setSelectedCategoryForCountSheet] = useState('all');
+  const [selectedCategory, setSelectedCategory] = useState('all');
   const [expandedRows, setExpandedRows] = useState({});
   
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
@@ -1181,7 +1180,7 @@ function InventoryView({ products, categories, suppliers }) {
 
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === '' || p.category_id === parseInt(selectedCategory);
+    const matchesCategory = selectedCategory === 'all' || p.category_id === parseInt(selectedCategory);
     return matchesSearch && matchesCategory;
   });
 
@@ -1230,8 +1229,8 @@ function InventoryView({ products, categories, suppliers }) {
             <div className="flex items-center bg-white border border-slate-300 rounded-lg shadow-sm">
                 <span className="px-3 text-slate-400"><Filter className="w-4 h-4" /></span>
                 <select 
-                    value={selectedCategoryForCountSheet}
-                    onChange={(e) => setSelectedCategoryForCountSheet(e.target.value)}
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
                     className="pr-4 py-2 bg-transparent text-sm font-medium text-slate-700 outline-none border-none min-w-[150px]"
                 >
                     <option value="all">Todas las Categorías</option>
@@ -1241,7 +1240,7 @@ function InventoryView({ products, categories, suppliers }) {
                 </select>
             </div>
             <a 
-                href={route('products.count-sheet', { category: selectedCategoryForCountSheet })} 
+                href={route('products.count-sheet', { category: selectedCategory })} 
                 target="_blank" 
                 className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-all shadow-sm active:scale-95"
             >
