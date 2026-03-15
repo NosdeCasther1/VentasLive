@@ -228,23 +228,6 @@ export default function Close({ auth, history = [] }) {
     );
 }
 
-function SummaryCard({ title, amount, icon, color }) {
-    const colorClasses = {
-        indigo: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
-        blue: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-        red: 'bg-red-500/10 text-red-400 border-red-500/20',
-    };
-    return (
-        <div className={`p-4 rounded-2xl border ${colorClasses[color]} flex items-center space-x-4 h-full`}>
-            <div className={`p-3 rounded-xl bg-white/5`}>{icon}</div>
-            <div>
-                <p className="text-[10px] uppercase font-bold tracking-widest opacity-60">{title}</p>
-                <p className="text-lg font-mono font-bold">Q {parseFloat(amount).toFixed(2)}</p>
-            </div>
-        </div>
-    );
-}
-
 
 function SummaryCard({ title, amount, icon, color }) {
     const colorClasses = {

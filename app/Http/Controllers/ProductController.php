@@ -102,13 +102,13 @@ class ProductController extends Controller
 
     public function countSheet()
     {
-        $variants = ProductVariant::with(['product.category'])
+        $variants = ProductVariant::with('product')
             ->join('products', 'product_variants.product_id', '=', 'products.id')
-            ->orderBy('products.name')
             ->select('product_variants.*')
+            ->orderBy('products.name')
             ->get();
 
         $pdf = Pdf::loadView('reports.inventory-count', compact('variants'));
-        return $pdf->download('hoja-conteo-' . date('Y-m-d') . '.pdf');
+        return $pdf->stream('Hoja_Conteo_Inventario.pdf');
     }
 }

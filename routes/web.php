@@ -23,6 +23,11 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::middleware(['check.register'])->group(function () {
+        // Audit and Reports
+        Route::get('products/count-sheet', [\App\Http\Controllers\ProductController::class, 'countSheet'])->name('products.count-sheet');
+        Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
+        Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
+
         Route::get('/', [\App\Http\Controllers\ProductController::class, 'index'])->name('products.index');
         Route::resource('products', \App\Http\Controllers\ProductController::class)->except(['index']);
         Route::post('purchase-entries', [\App\Http\Controllers\PurchaseEntryController::class, 'store'])->name('purchase-entries.store');
@@ -39,10 +44,6 @@ Route::middleware(['auth'])->group(function () {
         Route::post('logistics/{sale}/cancel', [\App\Http\Controllers\LogisticsController::class, 'cancelOrder'])->name('logistics.cancel');
         Route::get('logistics/manifest', [\App\Http\Controllers\POSController::class, 'driverManifest'])->name('logistics.manifest');
 
-        // Audit and Reports
-        Route::get('products/count-sheet', [\App\Http\Controllers\ProductController::class, 'countSheet'])->name('products.count-sheet');
-        Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
-        Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
 
         // Modo Live Routes
         Route::get('api/live/bags', [\App\Http\Controllers\LiveController::class, 'getBags'])->name('live.bags');
