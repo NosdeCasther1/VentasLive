@@ -36,7 +36,8 @@ import {
   Boxes,
   X,
   Check,
-  BellRing
+  BellRing,
+  Wallet
 } from 'lucide-react';
 import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';

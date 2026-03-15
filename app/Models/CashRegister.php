@@ -19,6 +19,7 @@ class CashRegister extends Model
         'difference',
         'notes',
         'status',
+        'opening_details',
     ];
 
     protected $casts = [
@@ -31,6 +32,7 @@ class CashRegister extends Model
         'expected_amount' => 'decimal:2',
         'actual_amount' => 'decimal:2',
         'difference' => 'decimal:2',
+        'opening_details' => 'array',
     ];
 
     public function user()

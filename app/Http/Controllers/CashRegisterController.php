@@ -31,12 +31,14 @@ class CashRegisterController extends Controller
     {
         $request->validate([
             'opening_amount' => 'required|numeric|min:0',
+            'opening_details' => 'nullable|array',
         ]);
 
         CashRegister::create([
             'user_id' => auth()->id(),
             'opened_at' => now(),
             'opening_amount' => $request->opening_amount,
+            'opening_details' => $request->opening_details,
             'status' => 'open',
         ]);
 
