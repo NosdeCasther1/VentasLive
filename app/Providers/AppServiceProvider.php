@@ -19,6 +19,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        \Illuminate\Support\Facades\Gate::define('view-reports', fn($user) => $user->role === 'admin');
+        \Illuminate\Support\Facades\Gate::define('manage-settings', fn($user) => $user->role === 'admin');
+        \Illuminate\Support\Facades\Gate::define('adjust-inventory', fn($user) => $user->role === 'admin');
     }
 }

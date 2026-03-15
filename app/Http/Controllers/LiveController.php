@@ -152,10 +152,31 @@ class LiveController extends Controller
             'shipping_address' => 'required|string',
             'shipping_cost' => 'required|numeric|min:0',
             'payment_status' => 'required|string',
+            'discount' => 'nullable|numeric|min:0',
         ]);
 
+        $user = auth()->user();
+        $saleDetails = $sale->details()->get();
+        $subtotal = $saleDetails->sum(fn($d) => $d->selling_price * $d->quantity);
+        $totalPMP = $saleDetails->sum(fn($d) => $d->historical_cost * $d->quantity);
+        $discount = $request->discount ?? 0;
+        $precioFinal = $subtotal - $discount;
+
+        if ($user->role === 'cashier') {
+            if ($subtotal > 0 && ($discount / $subtotal) > 0.15) {
+                return response()->json(['error' => 'Límite excedido. Los cajeros solo pueden dar hasta un 15% de descuento.'], 403);
+            }
+            if ($precioFinal < $totalPMP) {
+                return response()->json(['error' => "Alerta de Pérdida: No puedes vender por debajo del costo de inventario (Q " . number_format($totalPMP, 2) . ")."], 403);
+            }
+        } elseif ($user->role === 'admin') {
+            if ($precioFinal < $totalPMP || ($subtotal > 0 && ($discount / $subtotal) > 0.15)) {
+                \Log::warning("Checkout Live autorizado por admin con pérdida o descuento alto. Usuario: {$user->name}, Venta ID: {$sale->id}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}");
+            }
+        }
+
         try {
-            return DB::transaction(function () use ($request, $sale) {
+            return DB::transaction(function () use ($request, $sale, $discount, $subtotal) {
                 // 1. Associate or create Customer
                 $customer = Customer::firstOrCreate(
                     ['social_handle' => $sale->social_handle],
@@ -174,7 +195,8 @@ class LiveController extends Controller
                     'shipping_address' => $request->shipping_address,
                     'shipping_phone' => $request->customer_phone,
                     'shipping_cost' => $request->shipping_cost,
-                    'total' => $sale->total + $request->shipping_cost,
+                    'total' => ($subtotal - $discount) + $request->shipping_cost,
+                    'discount' => $discount,
                     'status' => 'completed',
                     'shipping_status' => 'pending_confirmation',
                     'payment_status' => $request->payment_status === 'Pago Contra Entrega' ? 'pending_cod' : 'paid',

@@ -106,7 +106,37 @@ class POSController extends Controller
             'shipping_phone' => 'nullable|string|max:50',
             'shipping_cost' => 'nullable|numeric|min:0',
             'payment_status' => 'nullable|string',
+            'discount' => 'nullable|numeric|min:0',
         ]);
+
+        $user = auth()->user();
+        $subtotal = 0;
+        $totalPMP = 0;
+        foreach ($request->items as $item) {
+            $variant = ProductVariant::find($item['variant_id']);
+            $subtotal += $item['price'] * $item['quantity'];
+            $totalPMP += ($variant->average_cost ?? 0) * $item['quantity'];
+        }
+
+        $discount = $request->discount ?? 0;
+        $precioFinal = $subtotal - $discount;
+
+        // Reglas de Negocio Anti-Pérdidas
+        if ($user->role === 'cashier') {
+            // Límite de descuento (15%)
+            if ($subtotal > 0 && ($discount / $subtotal) > 0.15) {
+                return redirect()->back()->withErrors(['discount' => 'Límite excedido. Los cajeros solo pueden dar hasta un 15% de descuento.']);
+            }
+
+            // Alerta de Pérdida (Precio Final < Total PMP)
+            if ($precioFinal < $totalPMP) {
+                return redirect()->back()->withErrors(['discount' => "Alerta de Pérdida: No puedes vender por debajo del costo de inventario (Q " . number_format($totalPMP, 2) . ")."]);
+            }
+        } elseif ($user->role === 'admin') {
+            if ($precioFinal < $totalPMP || ($subtotal > 0 && ($discount / $subtotal) > 0.15)) {
+                \Log::warning("Venta autorizada por admin con pérdida o descuento alto. Usuario: {$user->name}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}");
+            }
+        }
 
         $saleId = DB::transaction(function () use ($request) {
             $total = 0;
@@ -131,6 +161,7 @@ class POSController extends Controller
                 'shipping_phone' => $request->shipping_phone,
                 'shipping_cost' => $request->shipping_cost,
                 'payment_status' => $request->payment_status,
+                'discount' => $request->discount ?? 0,
                 'cash_register_id' => ($request->payment_method === 'cash' && $openRegister) ? $openRegister->id : null,
             ]);
 
@@ -195,7 +226,33 @@ class POSController extends Controller
             'shipping_phone' => 'required|string|max:50',
             'shipping_cost' => 'required|numeric|min:0',
             'payment_status' => 'required|string|in:Pagado,Pago Contra Entrega',
+            'discount' => 'nullable|numeric|min:0',
         ]);
+
+        $user = auth()->user();
+        $itemsSubtotal = 0;
+        $totalPMP = 0;
+        foreach ($request->items as $item) {
+            $variant = ProductVariant::find($item['variant_id']);
+            $itemsSubtotal += $item['price'] * $item['quantity'];
+            $totalPMP += ($variant->average_cost ?? 0) * $item['quantity'];
+        }
+
+        $discount = $request->discount ?? 0;
+        $precioFinal = $itemsSubtotal - $discount;
+
+        if ($user->role === 'cashier') {
+            if ($itemsSubtotal > 0 && ($discount / $itemsSubtotal) > 0.15) {
+                return redirect()->back()->withErrors(['discount' => 'Límite excedido. Los cajeros solo pueden dar hasta un 15% de descuento.']);
+            }
+            if ($precioFinal < $totalPMP) {
+                return redirect()->back()->withErrors(['discount' => "Alerta de Pérdida: No puedes vender por debajo del costo de inventario (Q " . number_format($totalPMP, 2) . ")."]);
+            }
+        } elseif ($user->role === 'admin') {
+            if ($precioFinal < $totalPMP || ($itemsSubtotal > 0 && ($discount / $itemsSubtotal) > 0.15)) {
+                \Log::warning("Envío autorizado por admin con pérdida o descuento alto. Usuario: {$user->name}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}");
+            }
+        }
 
         $saleId = DB::transaction(function () use ($request) {
             $cartTotal = 0;
@@ -218,6 +275,7 @@ class POSController extends Controller
                 'shipping_cost' => $request->shipping_cost,
                 'shipping_status' => 'packing',
                 'payment_status' => $request->payment_status === 'Pago Contra Entrega' ? 'pending_cod' : 'paid',
+                'discount' => $request->discount ?? 0,
             ]);
 
             foreach ($request->items as $item) {

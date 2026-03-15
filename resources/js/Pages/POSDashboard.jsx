@@ -213,10 +213,10 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           
           <div className="mt-6 mb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administración</div>
           <NavItem id="clientes" label="Directorio de Clientes" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem id="proveedores" label="Proveedores" icon={<Store size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           
           {(auth?.user?.role === 'admin' || !auth?.user) && (
             <>
+              <NavItem id="proveedores" label="Proveedores" icon={<Store size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
               <NavItem id="reportes" label="Reportes" icon={<BarChart3 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
               <NavItem id="contabilidad" label="Libros Contables" icon={<BookOpen size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
               <NavItem id="gastos" label="Control de Gastos" icon={<CreditCard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -400,16 +400,16 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
         {/* SCROLLABLE CONTENT */}
         <div className="flex-1 overflow-y-auto p-8">
           {activeTab === 'dashboard' && <Dsh_DashboardView products={products} analytics={analytics} />}
-          {activeTab === 'live' && <LiveView products={products} currentSession={currentSession} sessionTimer={sessionTimer} onEndLive={handleEndLive} handleStartLive={handleStartLive} />}
-          {activeTab === 'pos' && <POSView products={products} initialAction={posInitialAction} setInitialAction={setPosInitialAction} />}
-          {activeTab === 'inventario' && <InventoryView products={products} categories={categories} suppliers={suppliers} />}
-          {activeTab === 'pedidos' && <OrdersView deliveries={deliveries} setActiveTab={setActiveTab} setPosInitialAction={setPosInitialAction} />}
-          {activeTab === 'clientes' && <CustomersView customers={customers} />}
-          {activeTab === 'proveedores' && <SuppliersView suppliers={suppliers} />}
-          {activeTab === 'reportes' && <ReportsView />}
-          {activeTab === 'contabilidad' && <AccountingReports />}
-          {activeTab === 'gastos' && <ExpensesView />}
-          {activeTab === 'configuracion' && <SettingsIndex settings={settings} users={users} />}
+          {activeTab === 'live' && <LiveView auth={auth} products={products} currentSession={currentSession} sessionTimer={sessionTimer} onEndLive={handleEndLive} handleStartLive={handleStartLive} />}
+          {activeTab === 'pos' && <POSView auth={auth} products={products} initialAction={posInitialAction} setInitialAction={setPosInitialAction} />}
+          {activeTab === 'inventario' && <InventoryView auth={auth} products={products} categories={categories} suppliers={suppliers} />}
+          {activeTab === 'pedidos' && <OrdersView auth={auth} deliveries={deliveries} setActiveTab={setActiveTab} setPosInitialAction={setPosInitialAction} />}
+          {activeTab === 'clientes' && <CustomersView auth={auth} customers={customers} />}
+          {activeTab === 'proveedores' && <SuppliersView auth={auth} suppliers={suppliers} />}
+          {activeTab === 'reportes' && <ReportsView auth={auth} />}
+          {activeTab === 'contabilidad' && <AccountingReports auth={auth} />}
+          {activeTab === 'gastos' && <ExpensesView auth={auth} />}
+          {activeTab === 'configuracion' && <SettingsIndex auth={auth} settings={settings} users={users} />}
         </div>
       </main>
 
@@ -568,7 +568,7 @@ function Dsh_StatCard({ title, amount, subtitle, trend, isPositive, icon, color 
 }
 
 // 2. MODO LIVE VIEW (Adaptado del diseño anterior)
-function LiveView({ products, currentSession, sessionTimer, onEndLive, handleStartLive }) {
+function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, handleStartLive }) {
   const [bags, setBags] = useState([]);
   const [isLoadingBags, setIsLoadingBags] = useState(true);
 
@@ -606,8 +606,9 @@ function LiveView({ products, currentSession, sessionTimer, onEndLive, handleSta
     customer_name: '',
     customer_phone: '',
     shipping_address: '',
-    shipping_cost: 0,
-    payment_status: 'Pago Contra Entrega'
+    shipping_cost: '0',
+    payment_status: 'Pago Contra Entrega',
+    discount: '0'
   });
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [cancellingIds, setCancellingIds] = useState([]);
@@ -643,8 +644,9 @@ function LiveView({ products, currentSession, sessionTimer, onEndLive, handleSta
       customer_name: '',
       customer_phone: '',
       shipping_address: '',
-      shipping_cost: 0,
-      payment_status: 'Pago Contra Entrega'
+      shipping_cost: '0',
+      payment_status: 'Pago Contra Entrega',
+      discount: '0'
     });
     setIsCheckoutModalOpen(true);
   };
@@ -839,13 +841,7 @@ function LiveView({ products, currentSession, sessionTimer, onEndLive, handleSta
 
   // Filtrado de variantes para el autocomplete
   const filteredVariants = products.flatMap(p => 
-    (p.variants || [])
-      .filter(v => v.stock > 0)
-      .map(v => ({
-        ...v,
-        product_name: p.name,
-        search_text: `${p.name} ${v.size || ''} ${v.color || ''} ${v.sku}`.toLowerCase()
-      }))
+    (p.variants || []).map(v => ({...v, product_name: p.name, search_text: `${p.name} ${v.size || ''} ${v.color || ''} ${v.sku}`.toLowerCase()}))
   ).filter(v => v.search_text.includes(searchQuery.toLowerCase())).slice(0, 10);
 
   return (
@@ -1246,18 +1242,23 @@ function LiveView({ products, currentSession, sessionTimer, onEndLive, handleSta
                   <input required type="number" step="0.01" value={checkoutData.shipping_cost} onChange={e => setCheckoutData({...checkoutData, shipping_cost: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 outline-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Método de Pago</label>
-                  <select required value={checkoutData.payment_status} onChange={e => setCheckoutData({...checkoutData, payment_status: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 outline-none">
-                    <option value="Pago Contra Entrega">Pago Contra Entrega</option>
-                    <option value="Pagado">Ya Pagado (Transferencia)</option>
-                  </select>
+                   <label className="block text-xs font-bold text-amber-600 uppercase mb-1">Descuento (Q)</label>
+                   <input type="number" step="0.01" value={checkoutData.discount} onChange={e => setCheckoutData({...checkoutData, discount: e.target.value})} className="w-full bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-sm focus:border-amber-500 outline-none font-bold" />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1">Estado de Pago</label>
+                <select required value={checkoutData.payment_status} onChange={e => setCheckoutData({...checkoutData, payment_status: e.target.value})} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-emerald-500 outline-none">
+                  <option value="Pago Contra Entrega">Pago Contra Entrega</option>
+                  <option value="Pagado">Ya Pagado (Transferencia)</option>
+                </select>
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                 <div>
                   <p className="text-xs text-slate-400 font-bold uppercase">Total a Cobrar</p>
-                  <p className="text-xl font-bold text-indigo-700">Q {(parseFloat(checkoutBag?.total || 0) + parseFloat(checkoutData.shipping_cost || 0)).toFixed(2)}</p>
+                  <p className="text-xl font-bold text-indigo-700">Q {(parseFloat(checkoutBag?.total || 0) - parseFloat(checkoutData.discount || 0) + parseFloat(checkoutData.shipping_cost || 0)).toFixed(2)}</p>
                 </div>
                 <button type="submit" disabled={isProcessingCheckout} className="bg-emerald-600 text-white px-8 py-3 rounded-lg font-bold shadow-lg hover:bg-emerald-700 flex items-center">
                   {isProcessingCheckout ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <CheckCircle2 className="w-5 h-5 mr-2" />}
@@ -1273,7 +1274,7 @@ function LiveView({ products, currentSession, sessionTimer, onEndLive, handleSta
 }
 
 // 3. INVENTARIO VIEW
-function InventoryView({ products, categories, suppliers }) {
+function InventoryView({ auth, products, categories, suppliers }) {
   const emptyVariant = { sku: '', size: '', color: '', reference_cost: '', margin: '', selling_price: '' };
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -1438,22 +1439,26 @@ function InventoryView({ products, categories, suppliers }) {
                     <option value="out_of_stock">Agotado</option>
                 </select>
             </div>
-            <a 
-                href={route('products.count-sheet', { category: selectedCategory, stock: stockFilter })} 
-                target="_blank" 
-                className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-all shadow-sm active:scale-95"
-            >
-              <Printer className="w-4 h-4 mr-2" /> Hoja de Conteo
-            </a>
-            <button onClick={fetchAdjustmentHistory} className="flex items-center px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors shadow-sm border border-slate-300">
-              <History className="w-4 h-4 mr-2" /> Historial
-            </button>
-            <button onClick={() => setIsPurchaseModalOpen(true)} className="flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
-             <PlusCircle className="w-4 h-4 mr-2" /> Ingresar Compra
-           </button>
-           <button onClick={openAddModal} className="flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
-             <Plus className="w-4 h-4 mr-2" /> Nuevo Producto
-           </button>
+            {auth?.user?.role === 'admin' && (
+              <>
+                <a 
+                    href={route('products.count-sheet', { category: selectedCategory, stock: stockFilter })} 
+                    target="_blank" 
+                    className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-all shadow-sm active:scale-95"
+                >
+                  <Printer className="w-4 h-4 mr-2" /> Hoja de Conteo
+                </a>
+                <button onClick={fetchAdjustmentHistory} className="flex items-center px-4 py-2 bg-slate-100 text-slate-700 font-medium rounded-lg hover:bg-slate-200 transition-colors shadow-sm border border-slate-300">
+                  <History className="w-4 h-4 mr-2" /> Historial
+                </button>
+                <button onClick={() => setIsPurchaseModalOpen(true)} className="flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
+                 <PlusCircle className="w-4 h-4 mr-2" /> Ingresar Compra
+               </button>
+               <button onClick={openAddModal} className="flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
+                 <Plus className="w-4 h-4 mr-2" /> Nuevo Producto
+               </button>
+              </>
+            )}
         </div>
       </div>
 
@@ -1481,8 +1486,12 @@ function InventoryView({ products, categories, suppliers }) {
                     <td className="px-6 py-4 text-center"><span className="bg-indigo-50 text-indigo-600 px-2 py-1 rounded text-xs font-bold">{p.variants?.length || 0}</span></td>
                     <td className="px-6 py-4 text-center"><span className={`text-lg font-bold ${totalStock <= 0 ? 'text-red-500' : 'text-slate-800'}`}>{totalStock}</span></td>
                     <td className="px-6 py-4 text-right">
-                      <button onClick={(e) => { e.stopPropagation(); openEditModal(p); }} className="text-slate-400 hover:text-indigo-600 p-1 ml-2"><Edit className="w-4 h-4" /></button>
-                      <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="text-slate-400 hover:text-red-600 p-1 ml-2"><Trash2 className="w-4 h-4" /></button>
+                      {auth?.user?.role === 'admin' && (
+                        <>
+                          <button onClick={(e) => { e.stopPropagation(); openEditModal(p); }} className="text-slate-400 hover:text-indigo-600 p-1 ml-2"><Edit className="w-4 h-4" /></button>
+                          <button onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }} className="text-slate-400 hover:text-red-600 p-1 ml-2"><Trash2 className="w-4 h-4" /></button>
+                        </>
+                      )}
                     </td>
                   </tr>
                   
@@ -1512,13 +1521,15 @@ function InventoryView({ products, categories, suppliers }) {
                                    <td className="py-2.5 text-center">{v.stock <= 0 ? <span className="text-red-500 font-bold bg-red-50 px-2 py-0.5 rounded text-[10px] uppercase">Agotado</span> : <span className="font-bold text-slate-700">{v.stock}</span>}</td>
                                    <td className="py-2.5 text-center text-amber-600 font-medium">{v.reserved}</td>
                                    <td className="py-2.5 text-right">
-                                        <button 
-                                            onClick={(e) => { e.stopPropagation(); openAdjustmentModal(v, p); }}
-                                            className="p-1 px-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-all border border-transparent hover:border-amber-200 shadow-sm active:scale-95 flex items-center float-right"
-                                            title="Ajustar Stock"
-                                        >
-                                            <Settings className="w-4 h-4" />
-                                        </button>
+                                        {auth?.user?.role === 'admin' && (
+                                          <button 
+                                              onClick={(e) => { e.stopPropagation(); openAdjustmentModal(v, p); }}
+                                              className="p-1 px-2 text-amber-600 hover:bg-amber-100 rounded-lg transition-all border border-transparent hover:border-amber-200 shadow-sm active:scale-95 flex items-center float-right"
+                                              title="Ajustar Stock"
+                                          >
+                                              <Settings className="w-4 h-4" />
+                                          </button>
+                                        )}
                                    </td>
                                  </tr>
                                ))}
@@ -1803,7 +1814,7 @@ function InventoryView({ products, categories, suppliers }) {
 // 4. PEDIDOS Y LOGÍSTICA VIEW
 
 // 4. PEDIDOS Y LOGÍSTICA VIEW
-function OrdersView({ deliveries = [], setActiveTab, setPosInitialAction }) {
+function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }) {
   const [generatingDraftFor, setGeneratingDraftFor] = useState(null);
   const [draftMessage, setDraftMessage] = useState('');
   
@@ -2244,7 +2255,7 @@ function OrdersView({ deliveries = [], setActiveTab, setPosInitialAction }) {
 }
 
 // 5. NUEVO: MÓDULO DE VENTA MANUAL / POST-LIVE
-function POSView({ products, initialAction, setInitialAction }) {
+function POSView({ auth, products, initialAction, setInitialAction }) {
   const [cart, setCart] = useState([]);
   const [customerName, setCustomerName] = useState('');
   const [dmText, setDmText] = useState('');
@@ -2321,6 +2332,7 @@ function POSView({ products, initialAction, setInitialAction }) {
   const [shippingPhone, setShippingPhone] = useState('');
   const [shippingCost, setShippingCost] = useState('');
   const [shippingPaymentStatus, setShippingPaymentStatus] = useState('Pago Contra Entrega');
+  const [posDiscount, setPosDiscount] = useState('0');
 
   const inventory = products.filter(p => {
     const searchLower = searchQuery.toLowerCase();
@@ -2485,17 +2497,19 @@ function POSView({ products, initialAction, setInitialAction }) {
 
   const confirmLocalPayment = () => {
     let change = 0;
+    const finalTotal = total - (parseFloat(posDiscount) || 0);
+    
     if (localPaymentMethod === 'Efectivo') {
         const received = parseFloat(amountReceived) || 0;
-        if (received < total) {
-            alert("El monto recibido es menor al total.");
+        if (received < finalTotal) {
+            alert("El monto recibido es menor al total con descuento.");
             return;
         }
-        change = received - total;
+        change = received - finalTotal;
     }
     submitSale('local', {
         payment_method: localPaymentMethod,
-        amount_received: localPaymentMethod === 'Efectivo' ? parseFloat(amountReceived) : total,
+        amount_received: localPaymentMethod === 'Efectivo' ? parseFloat(amountReceived) : finalTotal,
         change: change,
         payment_status: 'Pagado'
     });
@@ -2525,6 +2539,7 @@ function POSView({ products, initialAction, setInitialAction }) {
         quantity: item.qty,
         price: item.price
       })),
+      discount: parseFloat(posDiscount) || 0,
       ...extraData
     };
 
@@ -2847,6 +2862,21 @@ ${itemsText}
                 </select>
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-amber-600 uppercase mb-2">Descuento Especial (Q)</label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-amber-500">Q</span>
+                  <input 
+                    type="number" 
+                    step="0.01"
+                    value={posDiscount} 
+                    onChange={e => setPosDiscount(e.target.value)}
+                    placeholder="0.00" 
+                    className="w-full pl-9 pr-4 py-3 border border-amber-200 rounded-lg bg-amber-50 outline-none focus:border-amber-500 text-lg font-bold shadow-sm"
+                  />
+                </div>
+              </div>
+
               {localPaymentMethod === 'Efectivo' && (
                 <div className="animate-in fade-in slide-in-from-top-2">
                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Monto Recibido</label>
@@ -2854,7 +2884,7 @@ ${itemsText}
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Q</span>
                     <input 
                       type="number" 
-                      min={total}
+                      min={total - (parseFloat(posDiscount) || 0)}
                       step="0.01"
                       value={amountReceived} 
                       onChange={e => setAmountReceived(e.target.value)}
@@ -2862,10 +2892,10 @@ ${itemsText}
                       className="w-full pl-9 pr-4 py-3 border border-slate-300 rounded-lg bg-white outline-none focus:border-indigo-500 text-lg font-bold shadow-sm"
                     />
                   </div>
-                  {(parseFloat(amountReceived) > total) && (
+                  {(parseFloat(amountReceived) > (total - (parseFloat(posDiscount) || 0))) && (
                     <div className="mt-3 flex justify-between items-center bg-emerald-50 text-emerald-700 p-3 rounded-lg border border-emerald-200">
                       <span className="text-xs font-bold uppercase">Su Cambio:</span>
-                      <span className="text-lg font-black">Q {(parseFloat(amountReceived) - total).toFixed(2)}</span>
+                      <span className="text-lg font-black">Q {(parseFloat(amountReceived) - (total - (parseFloat(posDiscount) || 0))).toFixed(2)}</span>
                     </div>
                   )}
                 </div>
@@ -2873,7 +2903,7 @@ ${itemsText}
 
               <button 
                 onClick={confirmLocalPayment}
-                disabled={localPaymentMethod === 'Efectivo' && (!amountReceived || parseFloat(amountReceived) < total)}
+                disabled={localPaymentMethod === 'Efectivo' && (!amountReceived || parseFloat(amountReceived) < (total - (parseFloat(posDiscount) || 0)))}
                 className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold py-3.5 rounded-xl shadow-md transition-colors flex justify-center items-center text-sm"
               >
                 <CheckCircle2 className="w-5 h-5 mr-2" /> Confirmar Pago
@@ -2926,9 +2956,16 @@ ${itemsText}
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                   <label className="block text-xs font-bold text-amber-600 uppercase mb-1">Descuento (Q)</label>
+                   <input type="number" step="0.01" value={posDiscount} onChange={e => setPosDiscount(e.target.value)} className="w-full border border-amber-200 rounded-lg p-2.5 bg-amber-50 focus:bg-white focus:border-amber-500 outline-none shadow-sm text-sm font-bold text-amber-700" placeholder="0.00" />
+                </div>
+              </div>
+
               <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
                 <span className="font-bold text-slate-600">Total a Cobrar:</span>
-                <span className="text-2xl font-black text-indigo-700">Q {(total + (parseFloat(shippingCost) || 0)).toFixed(2)}</span>
+                <span className="text-2xl font-black text-indigo-700">Q {(total - (parseFloat(posDiscount) || 0) + (parseFloat(shippingCost) || 0)).toFixed(2)}</span>
               </div>
 
               <button 
@@ -3148,7 +3185,7 @@ ${itemsText}
 }
 
 // 5. CLIENTES VIEW
-function CustomersView({ customers }) {
+function CustomersView({ auth, customers }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3393,7 +3430,7 @@ function CustomerAutocomplete({ onSelect, initialValue = '' }) {
 }
 
 // 7. PROVEEDORES VIEW
-function SuppliersView({ suppliers }) {
+function SuppliersView({ auth, suppliers }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingSupplier, setEditingSupplier] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -3553,8 +3590,8 @@ function SuppliersView({ suppliers }) {
   );
 }
 
-// 6. REPORTES VIEW
-function ReportsView() {
+// 8. REPORTES VIEW
+function ReportsView({ auth }) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [metrics, setMetrics] = useState({
@@ -3851,7 +3888,7 @@ function NavItem({ id, label, icon, activeTab, setActiveTab, badge }) {
 }
 
 
-function ExpensesView() {
+function ExpensesView({ auth }) {
   const [expenses, setExpenses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);

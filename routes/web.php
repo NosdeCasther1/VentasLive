@@ -23,17 +23,22 @@ Route::middleware(['auth'])->group(function () {
     });
 
     Route::middleware(['check.register'])->group(function () {
-        // Audit and Reports
-        Route::get('products/count-sheet', [\App\Http\Controllers\ProductController::class, 'countSheet'])->name('products.count-sheet');
-        Route::post('products/adjust-stock', [\App\Http\Controllers\ProductController::class, 'adjustStock'])->name('products.adjust-stock');
-        Route::get('api/products/adjustments', [\App\Http\Controllers\ProductController::class, 'adjustmentHistory'])->name('api.products.adjustments');
-        Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
-        Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
+        // Admin Only: Inventory Adjustments and Counting
+        Route::middleware(['role:admin'])->group(function () {
+            Route::get('products/count-sheet', [\App\Http\Controllers\ProductController::class, 'countSheet'])->name('products.count-sheet');
+            Route::post('products/adjust-stock', [\App\Http\Controllers\ProductController::class, 'adjustStock'])->name('products.adjust-stock');
+            Route::get('api/products/adjustments', [\App\Http\Controllers\ProductController::class, 'adjustmentHistory'])->name('api.products.adjustments');
+            Route::post('purchase-entries', [\App\Http\Controllers\PurchaseEntryController::class, 'store'])->name('purchase-entries.store');
+        });
 
         Route::get('/', [\App\Http\Controllers\ProductController::class, 'index'])->name('products.index');
         Route::resource('products', \App\Http\Controllers\ProductController::class)->except(['index']);
-        Route::post('purchase-entries', [\App\Http\Controllers\PurchaseEntryController::class, 'store'])->name('purchase-entries.store');
-        Route::resource('suppliers', \App\Http\Controllers\SupplierController::class)->except(['index', 'create', 'show', 'edit']);
+        
+        Route::middleware(['role:admin'])->group(function () {
+            Route::resource('suppliers', \App\Http\Controllers\SupplierController::class)->except(['index', 'create', 'show', 'edit']);
+            Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
+            Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
+        });
         Route::post('sales', [\App\Http\Controllers\POSController::class, 'store'])->name('sales.store');
         Route::post('sales/delivery', [\App\Http\Controllers\POSController::class, 'storeDelivery'])->name('sales.storeDelivery');
         Route::resource('customers', \App\Http\Controllers\CustomerController::class)->except(['create', 'show', 'edit']);
@@ -64,23 +69,27 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('logistics/driver/{sale}/delivered', [\App\Http\Controllers\LogisticsController::class, 'markAsDelivered'])->name('logistics.driver.delivered');
         Route::patch('logistics/driver/{sale}/returned', [\App\Http\Controllers\LogisticsController::class, 'markAsReturned'])->name('logistics.driver.returned');
 
-        // Expenses Routes
-        Route::resource('expenses', \App\Http\Controllers\ExpenseController::class)->except(['create', 'show', 'edit']);
-        Route::get('api/expenses', [\App\Http\Controllers\ExpenseController::class, 'index'])->name('expenses.api.index');
+        // Expenses Routes (Admin Only)
+        Route::middleware(['role:admin'])->group(function () {
+            Route::resource('expenses', \App\Http\Controllers\ExpenseController::class)->except(['create', 'show', 'edit']);
+            Route::get('api/expenses', [\App\Http\Controllers\ExpenseController::class, 'index'])->name('expenses.api.index');
+        });
     });
 
-    // Reports and Settings
-    Route::get('api/reports/metrics', [\App\Http\Controllers\ReportController::class, 'metrics'])->name('reports.metrics');
-    Route::get('reports/accounting', [\App\Http\Controllers\AccountingController::class, 'index'])->name('reports.accounting');
-    Route::get('api/accounting/diario', [\App\Http\Controllers\AccountingController::class, 'getDiario'])->name('api.accounting.diario');
-    Route::get('api/accounting/mayor', [\App\Http\Controllers\AccountingController::class, 'getMayor'])->name('api.accounting.mayor');
-    Route::get('api/accounting/estado-resultados', [\App\Http\Controllers\AccountingController::class, 'getEstadoResultados'])->name('api.accounting.estado-resultados');
-    Route::get('api/accounting/export/pdf', [\App\Http\Controllers\AccountingController::class, 'exportPdf'])->name('api.accounting.export.pdf');
-    Route::get('api/accounting/export/excel', [\App\Http\Controllers\AccountingController::class, 'exportExcel'])->name('api.accounting.export.excel');
+    // Reports and Settings (Admin Only)
+    Route::middleware(['role:admin'])->group(function () {
+        Route::get('api/reports/metrics', [\App\Http\Controllers\ReportController::class, 'metrics'])->name('reports.metrics');
+        Route::get('reports/accounting', [\App\Http\Controllers\AccountingController::class, 'index'])->name('reports.accounting');
+        Route::get('api/accounting/diario', [\App\Http\Controllers\AccountingController::class, 'getDiario'])->name('api.accounting.diario');
+        Route::get('api/accounting/mayor', [\App\Http\Controllers\AccountingController::class, 'getMayor'])->name('api.accounting.mayor');
+        Route::get('api/accounting/estado-resultados', [\App\Http\Controllers\AccountingController::class, 'getEstadoResultados'])->name('api.accounting.estado-resultados');
+        Route::get('api/accounting/export/pdf', [\App\Http\Controllers\AccountingController::class, 'exportPdf'])->name('api.accounting.export.pdf');
+        Route::get('api/accounting/export/excel', [\App\Http\Controllers\AccountingController::class, 'exportExcel'])->name('api.accounting.export.excel');
 
-    Route::get('settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
-    Route::post('settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
-    Route::resource('users', \App\Http\Controllers\UserController::class)->except(['index', 'create', 'show', 'edit']);
+        Route::get('settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
+        Route::post('settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
+        Route::resource('users', \App\Http\Controllers\UserController::class)->except(['index', 'create', 'show', 'edit']);
+    });
 
     // Notification Routes
     Route::post('notifications/{id}/mark-as-read', [\App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
