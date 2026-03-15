@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Product;
 use App\Models\Category;
 use App\Models\Supplier;
+use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class ProductController extends Controller
 {
@@ -96,5 +98,17 @@ class ProductController extends Controller
     {
         $product->delete();
         return redirect()->back()->with('success', 'Producto eliminado correctamente.');
+    }
+
+    public function countSheet()
+    {
+        $variants = ProductVariant::with(['product.category'])
+            ->join('products', 'product_variants.product_id', '=', 'products.id')
+            ->orderBy('products.name')
+            ->select('product_variants.*')
+            ->get();
+
+        $pdf = Pdf::loadView('reports.inventory-count', compact('variants'));
+        return $pdf->download('hoja-conteo-' . date('Y-m-d') . '.pdf');
     }
 }

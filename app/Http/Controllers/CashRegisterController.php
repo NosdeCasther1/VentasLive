@@ -20,11 +20,22 @@ class CashRegisterController extends Controller
             ->where('status', 'open')
             ->first();
 
+        $history = CashRegister::with('user')
+            ->where('status', 'closed')
+            ->orderBy('closed_at', 'desc')
+            ->limit(50)
+            ->get();
+
         if (!$openRegister) {
-            return Inertia::render('CashRegister/Open');
+            return Inertia::render('CashRegister/Open', [
+                'history' => $history
+            ]);
         }
 
-        return Inertia::render('CashRegister/Close');
+        return Inertia::render('CashRegister/Close', [
+            'openRegister' => $openRegister,
+            'history' => $history
+        ]);
     }
 
     public function store(Request $request)

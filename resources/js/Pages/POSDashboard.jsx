@@ -37,7 +37,9 @@ import {
   X,
   Check,
   BellRing,
-  Wallet
+  Wallet,
+  Printer,
+  FileSpreadsheet
 } from 'lucide-react';
 import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -1175,6 +1177,9 @@ function InventoryView({ products, categories, suppliers }) {
           </div>
         </div>
         <div className="flex space-x-3">
+           <a href={route('products.count-sheet')} target="_blank" className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-colors shadow-sm">
+             <span className="mr-2">🖨️</span> Hoja de Conteo
+           </a>
            <button onClick={() => setIsPurchaseModalOpen(true)} className="flex items-center px-4 py-2 bg-emerald-600 text-white font-medium rounded-lg hover:bg-emerald-700 transition-colors shadow-sm">
              <PlusCircle className="w-4 h-4 mr-2" /> Ingresar Compra
            </button>
@@ -3011,10 +3016,28 @@ function SuppliersView({ suppliers }) {
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
       <div className="p-6 border-b border-slate-200 flex flex-wrap gap-4 justify-between items-center bg-slate-50 rounded-t-xl">
-        <div className="flex space-x-3">
+        <div className="flex space-x-3 items-center">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Buscar proveedor..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-indigo-500 outline-none w-64 shadow-sm transition-all" />
+          </div>
+          <div className="flex items-center space-x-2 ml-4">
+             <a 
+               href={route('suppliers.export-pdf')} 
+               target="_blank"
+               className="p-2 bg-white border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+               title="Exportar PDF"
+             >
+               <Printer className="w-5 h-5" />
+             </a>
+             <a 
+               href={route('suppliers.export-excel')} 
+               target="_blank"
+               className="p-2 bg-white border border-slate-200 text-emerald-600 rounded-lg hover:bg-emerald-50 transition-colors shadow-sm"
+               title="Exportar Excel"
+             >
+               <FileSpreadsheet className="w-5 h-5" />
+             </a>
           </div>
         </div>
         <button onClick={openAddModal} className="flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
@@ -3103,6 +3126,8 @@ function SuppliersView({ suppliers }) {
 
 // 6. REPORTES VIEW
 function ReportsView() {
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [metrics, setMetrics] = useState({
     ingresos: 0,
     costos: 0,
@@ -3121,8 +3146,18 @@ function ReportsView() {
   });
   const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
-    fetch(route('reports.metrics'))
+  const months = [
+    { value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' }, { value: 3, label: 'Marzo' },
+    { value: 4, label: 'Abril' }, { value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
+    { value: 7, label: 'Julio' }, { value: 8, label: 'Agosto' }, { value: 9, label: 'Septiembre' },
+    { value: 10, label: 'Octubre' }, { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' }
+  ];
+
+  const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(route('reports.metrics', { month: selectedMonth, year: selectedYear }))
       .then(res => res.json())
       .then(data => {
         setMetrics(data);
@@ -3132,19 +3167,38 @@ function ReportsView() {
         console.error("Error fetching metrics:", err);
         setLoading(false);
       });
-  }, []);
+  }, [selectedMonth, selectedYear]);
 
   return (
     <div className="space-y-6 pb-20">
       {/* Header */}
-      <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
         <div>
           <h2 className="text-xl font-bold text-slate-800">Panel de Control de Negocio</h2>
           <p className="text-slate-500">Métricas correspondientes a: <span className="font-bold text-slate-700 capitalize">{metrics.mes}</span></p>
         </div>
-        <button onClick={() => window.location.reload()} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors">
-          <Loader2 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-        </button>
+        <div className="flex items-center space-x-3">
+          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+            <Filter className="w-4 h-4 text-slate-400 mr-2" />
+            <select 
+              value={selectedMonth} 
+              onChange={e => setSelectedMonth(e.target.value)}
+              className="bg-transparent border-none text-sm font-medium focus:ring-0"
+            >
+              {months.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+            <select 
+              value={selectedYear} 
+              onChange={e => setSelectedYear(e.target.value)}
+              className="bg-transparent border-none text-sm font-medium focus:ring-0 ml-1 border-l border-slate-200"
+            >
+              {years.map(y => <option key={y} value={y}>{y}</option>)}
+            </select>
+          </div>
+          <button onClick={() => window.location.reload()} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors">
+            <Loader2 className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+          </button>
+        </div>
       </div>
 
       {/* Row 1: Financial Summary */}

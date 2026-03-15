@@ -19,6 +19,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('/summary', [\App\Http\Controllers\CashRegisterController::class, 'summary'])->name('cash-register.summary');
         Route::post('/close', [\App\Http\Controllers\CashRegisterController::class, 'close'])->name('cash-register.close');
         Route::get('/print/{id}', [\App\Http\Controllers\CashRegisterController::class, 'printTicket'])->name('cash-register.print');
+        Route::get('/reprint/{id}', [\App\Http\Controllers\CashRegisterController::class, 'printTicket'])->name('cash-register.reprint');
     });
 
     Route::middleware(['check.register'])->group(function () {
@@ -37,6 +38,11 @@ Route::middleware(['auth'])->group(function () {
         Route::patch('logistics/{sale}/update-address', [\App\Http\Controllers\POSController::class, 'updateShippingAddress'])->name('logistics.updateAddress');
         Route::post('logistics/{sale}/cancel', [\App\Http\Controllers\LogisticsController::class, 'cancelOrder'])->name('logistics.cancel');
         Route::get('logistics/manifest', [\App\Http\Controllers\POSController::class, 'driverManifest'])->name('logistics.manifest');
+
+        // Audit and Reports
+        Route::get('products/count-sheet', [\App\Http\Controllers\ProductController::class, 'countSheet'])->name('products.count-sheet');
+        Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
+        Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
 
         // Modo Live Routes
         Route::get('api/live/bags', [\App\Http\Controllers\LiveController::class, 'getBags'])->name('live.bags');

@@ -12,10 +12,10 @@ use Illuminate\Support\Facades\DB;
 
 class ReportController extends Controller
 {
-    public function metrics()
+    public function metrics(Request $request)
     {
-        $currentMonth = Carbon::now()->month;
-        $currentYear = Carbon::now()->year;
+        $currentMonth = $request->query('month', Carbon::now()->month);
+        $currentYear = $request->query('year', Carbon::now()->year);
 
         // --- FASE 1: Resumen Financiero ---
         
@@ -23,7 +23,7 @@ class ReportController extends Controller
         $details = SaleDetail::whereMonth('created_at', $currentMonth)
             ->whereYear('created_at', $currentYear)
             ->whereHas('sale', function($q) {
-                $q->where('status', 'completed');
+                $q->whereIn('status', ['completed', 'delivered']);
             })
             ->get();
 
@@ -50,7 +50,7 @@ class ReportController extends Controller
         $topProducts = SaleDetail::whereMonth('created_at', $currentMonth)
             ->whereYear('created_at', $currentYear)
             ->whereHas('sale', function($q) {
-                $q->where('status', 'completed');
+                $q->whereIn('status', ['completed', 'delivered']);
             })
             ->select('product_variant_id', DB::raw('SUM(quantity) as total_sold'))
             ->groupBy('product_variant_id')
@@ -60,7 +60,7 @@ class ReportController extends Controller
             ->get()
             ->map(function($item) {
                 return [
-                    'name' => $item->productVariant->product->name . ' (' . ($item->productVariant->size ?? '') . ' ' . ($item->productVariant->color ?? '') . ')',
+                    'name' => ($item->productVariant->product->name ?? 'P. Borrado') . ' (' . ($item->productVariant->size ?? '') . ' ' . ($item->productVariant->color ?? '') . ')',
                     'quantity' => $item->total_sold
                 ];
             });
@@ -97,6 +97,8 @@ class ReportController extends Controller
 
         $successRate = $totalLogistics > 0 ? round(($delivered / $totalLogistics) * 100, 1) : 100;
 
+        $displayDate = Carbon::createFromDate($currentYear, $currentMonth, 1)->translatedFormat('F Y');
+
         return response()->json([
             'ingresos' => $totalIngresos,
             'costos' => $totalCostos,
@@ -111,7 +113,7 @@ class ReportController extends Controller
                 'total' => $totalLogistics,
                 'success_rate' => $successRate
             ],
-            'mes' => Carbon::now()->translatedFormat('F Y'),
+            'mes' => $displayDate,
         ]);
     }
 }
