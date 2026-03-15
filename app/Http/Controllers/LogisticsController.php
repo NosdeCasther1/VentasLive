@@ -8,6 +8,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 use App\Models\User;
+use App\Models\SaleDetail;
+use App\Models\CancelledLiveItem;
 use App\Notifications\OrderReturnedNotification;
 
 class LogisticsController extends Controller
@@ -126,5 +128,61 @@ class LogisticsController extends Controller
         } catch (\Exception $e) {
             return redirect()->back()->withErrors(['error' => 'Error al cancelar el pedido: ' . $e->getMessage()]);
         }
+    }
+
+    /**
+     * Libera un artículo de la bolsa, lo devuelve al inventario y guarda en el historial.
+     */
+    public function cancelItemFromBag(Request $request)
+    {
+        $request->validate([
+            'detail_id' => 'required|exists:sale_details,id',
+        ]);
+
+        return DB::transaction(function () use ($request) {
+            $detail = SaleDetail::with(['sale', 'productVariant'])->findOrFail($request->detail_id);
+            $sale = $detail->sale;
+            $variant = $detail->productVariant;
+
+            // 1. Revertir inventario: stock + quantity, reserved - quantity
+            if ($variant) {
+                $variant->increment('stock', $detail->quantity);
+                $variant->decrement('reserved', $detail->quantity);
+            }
+
+            // 2. Insertar en historial de artículos cancelados/liberados
+            CancelledLiveItem::create([
+                'sale_id' => $sale->id,
+                'product_variant_id' => $detail->product_variant_id,
+                'quantity' => $detail->quantity,
+                'original_selling_price' => $detail->selling_price,
+                'cancelled_at' => now(),
+            ]);
+
+            // 3. Actualizar total de la venta
+            $sale->decrement('total', $detail->selling_price * $detail->quantity);
+
+            // 4. Eliminar el detalle activo
+            $detail->delete();
+
+            return response()->json([
+                'message' => 'Artículo liberado correctamente.',
+                'new_total' => $sale->total,
+                'detail_id' => $request->detail_id
+            ]);
+        });
+    }
+
+    /**
+     * Obtiene el historial de artículos liberados para una bolsa específica.
+     */
+    public function getCancelledItemsForBag(Sale $sale)
+    {
+        $items = CancelledLiveItem::with('productVariant.product')
+            ->where('sale_id', $sale->id)
+            ->orderBy('cancelled_at', 'desc')
+            ->get();
+            
+        return response()->json($items);
     }
 }

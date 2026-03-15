@@ -453,6 +453,31 @@ function LiveView({ products }) {
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [cancellingIds, setCancellingIds] = useState([]);
 
+  // Historial de artículos liberados
+  const [cancelledItems, setCancelledItems] = useState([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const [activeModalTab, setActiveModalTab] = useState('active'); // 'active' o 'history'
+
+  const loadCancelledItemsHistory = async (saleId) => {
+    if (!saleId) return;
+    setIsLoadingHistory(true);
+    try {
+      const response = await axios.get(route('live.cancelledItems', saleId));
+      setCancelledItems(response.data);
+    } catch (error) {
+      console.error("Error loading history:", error);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (viewingBag) {
+      loadCancelledItemsHistory(viewingBag.id);
+      setActiveModalTab('active');
+    }
+  }, [viewingBag?.id]);
+
   const handleOpenCheckout = (bag) => {
     setCheckoutBag(bag);
     setCheckoutData({
@@ -575,28 +600,60 @@ function LiveView({ products }) {
     }
   };
 
-  const handleRemoveItem = async (detailId) => {
-    if(!confirm("¿Deseas eliminar este artículo de la bolsa?")) return;
+  const handleRemoveItem = async (item) => {
+    const result = await Swal.fire({
+      title: `¡Atención ${viewingBag?.social_handle || username}!`,
+      text: "¿Deseas liberar este artículo? Se devolverá al inventario disponible para otro cliente.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#10b981', 
+      cancelButtonColor: '#ef4444',
+      confirmButtonText: 'Sí, liberar',
+      cancelButtonText: 'No, cancelar',
+      reverseButtons: true
+    });
     
-    try {
-      const response = await axios.post(route('live.removeItem'), { detail_id: detailId });
-      
-      if (response.status === 200) {
-        const data = response.data;
-        const updatedBag = data.bag;
+    if (result.isConfirmed) {
+      try {
+        const response = await axios.post(route('live.cancelItem'), { detail_id: item.id });
         
-        if (updatedBag.details.length === 0) {
-          // Si la bolsa queda vacía, la eliminamos de la lista
-          setBags(bags.filter(b => b.id !== updatedBag.id));
-          setViewingBag(null);
-        } else {
-          setBags(bags.map(b => b.id === updatedBag.id ? updatedBag : b));
-          if (viewingBag?.id === updatedBag.id) setViewingBag(updatedBag);
+        if (response.status === 200) {
+          const data = response.data;
+          
+          // Actualizar localmente la bolsa activa
+          const updatedBag = {
+            ...viewingBag,
+            details: viewingBag.details.filter(d => d.id !== item.id),
+            total: data.new_total
+          };
+
+          if (updatedBag.details.length === 0) {
+            setBags(bags.filter(b => b.id !== updatedBag.id));
+            // No cerramos el modal, para que se vea el historial
+            setViewingBag(updatedBag);
+          } else {
+            setBags(bags.map(b => b.id === updatedBag.id ? updatedBag : b));
+            setViewingBag(updatedBag);
+          }
+
+          // Refrescar historial
+          loadCancelledItemsHistory(viewingBag.id);
+
+          Swal.fire({
+            title: '¡Artículo Liberado!',
+            text: 'Se ha actualizado el inventario y el historial.',
+            icon: 'success',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000,
+            timerProgressBar: true
+          });
         }
+      } catch (error) {
+        console.error("Error removing item:", error);
+        Swal.fire('Error', error.response?.data?.error || "Error al eliminar el artículo", 'error');
       }
-    } catch (error) {
-      console.error("Error removing item:", error);
-      alert(error.response?.data?.error || "Error al eliminar el artículo");
     }
   };
 
@@ -836,54 +893,107 @@ function LiveView({ products }) {
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col">
             <div className="px-6 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="font-bold text-slate-800 text-lg">Artículos en bolsa: @{viewingBag.social_handle}</h3>
+              <h3 className="font-bold text-slate-800 text-lg">Bolsa de @{viewingBag.social_handle}</h3>
               <button onClick={() => setViewingBag(null)} className="text-slate-400 hover:text-slate-600"><Plus className="w-6 h-6 rotate-45" /></button>
             </div>
-            <div className="p-6 overflow-y-auto max-h-[60vh]">
-              <table className="w-full text-left">
-                <thead>
-                  <tr className="text-xs font-bold text-slate-400 uppercase border-b border-slate-100">
-                    <th className="pb-2">Producto</th>
-                    <th className="pb-2 text-center">Cant.</th>
-                    <th className="pb-2 text-right">Precio</th>
-                    <th className="pb-2 text-right">Subtotal</th>
-                    <th className="pb-2"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {viewingBag.details.map(item => (
-                    <tr key={item.id} className="text-sm">
-                      <td className="py-3">
-                        <p className="font-bold text-slate-800">{item.product_variant?.product?.name}</p>
-                        <p className="text-xs text-slate-500">{item.product_variant?.size} / {item.product_variant?.color}</p>
-                      </td>
-                      <td className="py-3 text-center">{item.quantity}</td>
-                      <td className="py-3 text-right">Q {parseFloat(item.selling_price).toFixed(2)}</td>
-                      <td className="py-3 text-right font-bold">Q {(item.quantity * item.selling_price).toFixed(2)}</td>
-                      <td className="py-3 text-right">
-                        <button 
-                          onClick={() => {
-                            handleRemoveItem(item.id);
-                            // The bag state update will be handled by handleRemoveItem
-                            setViewingBag(prev => ({
-                              ...prev,
-                              details: prev.details.filter(d => d.id !== item.id),
-                              total: prev.total - (item.quantity * item.selling_price)
-                            }));
-                          }}
-                          className="text-red-400 hover:text-red-600"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      </td>
+
+            {/* Pestañas del Modal */}
+            <div className="flex border-b border-slate-100 bg-white">
+              <button 
+                onClick={() => setActiveModalTab('active')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-all ${activeModalTab === 'active' ? 'border-indigo-600 text-indigo-600 bg-indigo-50/30' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+              >
+                Artículos Activos ({viewingBag.details.length})
+              </button>
+              <button 
+                onClick={() => setActiveModalTab('history')}
+                className={`flex-1 py-3 text-sm font-bold border-b-2 transition-all ${activeModalTab === 'history' ? 'border-amber-500 text-amber-600 bg-amber-50/30' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+              >
+                🛍️ Historial de Liberados ({cancelledItems.length})
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto max-h-[50vh]">
+              {activeModalTab === 'active' ? (
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="text-xs font-bold text-slate-400 uppercase border-b border-slate-100">
+                      <th className="pb-2">Producto</th>
+                      <th className="pb-2 text-center">Cant.</th>
+                      <th className="pb-2 text-right">Precio</th>
+                      <th className="pb-2 text-right">Subtotal</th>
+                      <th className="pb-2"></th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {viewingBag.details.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="py-8 text-center text-slate-400 text-sm">No hay artículos activos.</td>
+                      </tr>
+                    ) : (
+                      viewingBag.details.map(item => (
+                        <tr key={item.id} className="text-sm">
+                          <td className="py-3">
+                            <p className="font-bold text-slate-800">{item.product_variant?.product?.name}</p>
+                            <p className="text-xs text-slate-500">{item.product_variant?.size} / {item.product_variant?.color}</p>
+                          </td>
+                          <td className="py-3 text-center font-bold">{item.quantity}</td>
+                          <td className="py-3 text-right">Q {parseFloat(item.selling_price).toFixed(2)}</td>
+                          <td className="py-3 text-right font-bold text-indigo-600">Q {(item.quantity * item.selling_price).toFixed(2)}</td>
+                          <td className="py-3 text-right">
+                            <button 
+                              onClick={() => handleRemoveItem(item)}
+                              className="p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
+                              title="Liberar artículo"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="space-y-4">
+                  {isLoadingHistory ? (
+                    <div className="py-12 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-amber-500" /></div>
+                  ) : cancelledItems.length === 0 ? (
+                    <div className="py-12 text-center text-slate-400">
+                      <Package className="w-12 h-12 mx-auto mb-2 opacity-10" />
+                      <p className="text-sm font-medium">Aún no se han liberado artículos de esta bolsa.</p>
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="text-xs font-bold text-slate-400 uppercase border-b border-slate-100">
+                          <th className="pb-2">Cant.</th>
+                          <th className="pb-2 text-center">Producto (Variante)</th>
+                          <th className="pb-2 text-right">Liberado el</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {cancelledItems.map(item => (
+                          <tr key={item.id} className="hover:bg-slate-50/50">
+                            <td className="py-3 font-bold text-amber-600">{item.quantity}</td>
+                            <td className="py-3 text-center">
+                              <p className="font-medium text-slate-700">{item.product_variant?.product?.name || 'Producto Eliminado'}</p>
+                              <p className="text-[10px] text-slate-400">{item.product_variant?.size} / {item.product_variant?.color}</p>
+                            </td>
+                            <td className="py-3 text-right text-slate-500 font-mono text-xs">
+                              {new Date(item.cancelled_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})} - {new Date(item.cancelled_at).toLocaleDateString()}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
             </div>
             <div className="p-6 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
               <div>
-                <p className="text-xs text-slate-400 font-bold uppercase">Total Acumulado</p>
+                <p className="text-xs text-slate-400 font-bold uppercase">Total Actual</p>
                 <p className="text-2xl font-bold text-indigo-700">Q {parseFloat(viewingBag.total).toFixed(2)}</p>
               </div>
               <div className="flex space-x-3">
@@ -891,13 +1001,13 @@ function LiveView({ products }) {
                   onClick={() => handleCancelBag(viewingBag.id)}
                   className="bg-red-50 text-red-600 border border-red-100 px-4 py-2 rounded-lg font-bold hover:bg-red-100 transition-colors flex items-center"
                 >
-                  <XCircle className="w-4 h-4 mr-2" /> Cancelar Bolsa
+                  <XCircle className="w-4 h-4 mr-2" /> Anular Bolsa
                 </button>
                 <button 
                   onClick={() => setViewingBag(null)}
                   className="bg-indigo-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-indigo-700"
                 >
-                  Cerrar Detalle
+                  Regresar
                 </button>
               </div>
             </div>

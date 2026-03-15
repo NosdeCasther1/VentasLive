@@ -24,6 +24,8 @@ Route::get('logistics/manifest', [\App\Http\Controllers\POSController::class, 'd
 Route::get('api/live/bags', [\App\Http\Controllers\LiveController::class, 'getBags'])->name('live.bags');
 Route::post('api/live/add-item', [\App\Http\Controllers\LiveController::class, 'addItemToBag'])->name('live.addItem');
 Route::post('api/live/remove-item', [\App\Http\Controllers\LiveController::class, 'removeItem'])->name('live.removeItem');
+Route::post('api/live/cancel-item', [\App\Http\Controllers\LogisticsController::class, 'cancelItemFromBag'])->name('live.cancelItem');
+Route::get('api/live/cancelled-items/{sale}', [\App\Http\Controllers\LogisticsController::class, 'getCancelledItemsForBag'])->name('live.cancelledItems');
 Route::post('api/live/cancel-bag/{sale}', [\App\Http\Controllers\LiveController::class, 'cancelBag'])->name('live.cancelBag');
 Route::post('api/live/checkout/{sale}', [\App\Http\Controllers\LiveController::class, 'checkout'])->name('live.checkout');
 Route::post('/live/process-ai', [\App\Http\Controllers\LiveController::class, 'processAI'])->name('live.processAI');
