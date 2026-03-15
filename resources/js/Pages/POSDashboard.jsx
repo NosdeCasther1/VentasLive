@@ -58,6 +58,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
   const [sessionTimer, setSessionTimer] = useState('00:00:00');
   const [posInitialAction, setPosInitialAction] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
 
   const unreadCount = auth?.user?.unread_notifications_count || 0;
   const notifications = auth?.user?.notifications || [];
@@ -225,7 +226,20 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           )}
         </nav>
 
-        <div className="p-4 border-t border-slate-800 relative">
+        <div className="p-4 border-t border-slate-800 relative bg-slate-900/50">
+          <div className="mb-4 px-2">
+            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mb-1">© 2026 VentaLive 360</p>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] text-slate-600">Versión 1.0.0</span>
+              <button 
+                onClick={() => setShowAboutModal(true)}
+                className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold transition-colors"
+              >
+                Acerca de
+              </button>
+            </div>
+          </div>
+
           {showUserMenu && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)}></div>
@@ -412,6 +426,9 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           {activeTab === 'configuracion' && <SettingsIndex auth={auth} settings={settings} users={users} />}
         </div>
       </main>
+
+      {/* MODAL ACERCA DE */}
+      <AboutModal isOpen={showAboutModal} onClose={() => setShowAboutModal(false)} />
 
     </div>
   );
@@ -4126,6 +4143,98 @@ function NavExternalLink({ href, label, icon }) {
       </div>
       <ChevronRight size={14} className="text-slate-600 opacity-60" />
     </Link>
+  );
+}
+
+// 4. MODAL ACERCA DE (ABOUT)
+function AboutModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 bg-slate-900/80 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-md overflow-hidden flex flex-col relative animate-in zoom-in-95 duration-300"
+        onClick={e => e.stopPropagation()}
+      >
+        
+        {/* Adorno de fondo */}
+        <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-indigo-600 to-violet-700 -z-10"></div>
+        <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16 blur-2xl"></div>
+
+        <div className="p-8 pb-0 text-center">
+           <button 
+            onClick={onClose} 
+            className="absolute top-6 right-6 p-2 bg-white/20 hover:bg-white/30 text-white rounded-full transition-all backdrop-blur-md"
+          >
+            <X className="w-5 h-5" />
+          </button>
+
+          <div className="w-24 h-24 bg-white rounded-3xl shadow-xl mx-auto flex items-center justify-center mb-6 transform -rotate-3 hover:rotate-0 transition-transform duration-500">
+             <div className="w-16 h-16 bg-indigo-500 rounded-2xl flex items-center justify-center shadow-inner">
+                <Radio className="w-10 h-10 text-white animate-pulse" />
+             </div>
+          </div>
+
+          <h3 className="text-2xl font-black text-white mb-1">VentaLive 360</h3>
+          <p className="text-indigo-100/80 text-sm font-medium">Plataforma de Gestión POS y Logística Live</p>
+        </div>
+
+        <div className="p-8 pt-10 text-center space-y-6">
+          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100">
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Versión Actual</p>
+                <p className="text-lg font-bold text-slate-800">1.0.0 <span className="text-[10px] bg-emerald-100 text-emerald-600 px-2 py-0.5 rounded-full ml-1">STABLE</span></p>
+              </div>
+              <div className="h-px bg-slate-200 w-12 mx-auto"></div>
+              <div>
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Desarrollado y Diseñado por</p>
+                <p className="text-xl font-black text-indigo-600 tracking-tight">Ing. Edson Castillo</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <a 
+              href="mailto:edsoncastilloh90@gmail.com" 
+              className="group flex flex-col items-center justify-center p-4 bg-slate-800 hover:bg-slate-900 rounded-2xl transition-all shadow-lg hover:shadow-slate-200"
+            >
+              <div className="w-10 h-10 bg-slate-700 group-hover:bg-indigo-500 rounded-xl flex items-center justify-center mb-2 transition-colors">
+                <Bell className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xs font-bold text-white">Escribir Email</span>
+            </a>
+            
+            <a 
+              href="https://wa.me/50233577478" 
+              target="_blank" 
+              rel="noopener noreferrer"
+              className="group flex flex-col items-center justify-center p-4 bg-emerald-500 hover:bg-emerald-600 rounded-2xl transition-all shadow-lg shadow-emerald-100 hover:shadow-emerald-200"
+            >
+              <div className="w-10 h-10 bg-white/20 group-hover:bg-white/30 rounded-xl flex items-center justify-center mb-2 transition-colors">
+                <MessageCircle className="w-5 h-5 text-white" />
+              </div>
+              <span className="text-xs font-bold text-white">WhatsApp</span>
+            </a>
+          </div>
+
+          <button 
+            onClick={onClose}
+            className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-2xl transition-all"
+          >
+            Entendido
+          </button>
+
+          <p className="text-[10px] text-slate-400 font-medium">
+            © 2026 Todos los derechos reservados. <br/>
+            Optimizado para alto volumen de ventas en transmisiones en vivo.
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
