@@ -3106,7 +3106,17 @@ function ReportsView() {
   const [metrics, setMetrics] = useState({
     ingresos: 0,
     costos: 0,
+    gastos: 0,
     utilidad: 0,
+    utilidad_neta: 0,
+    top_products: [],
+    top_customers: [],
+    logistics: {
+      delivered: 0,
+      failed: 0,
+      total: 0,
+      success_rate: 100
+    },
     mes: 'Cargando...'
   });
   const [loading, setLoading] = useState(true);
@@ -3125,10 +3135,11 @@ function ReportsView() {
   }, []);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 pb-20">
+      {/* Header */}
       <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
         <div>
-          <h2 className="text-xl font-bold text-slate-800">Resumen Financiero</h2>
+          <h2 className="text-xl font-bold text-slate-800">Panel de Control de Negocio</h2>
           <p className="text-slate-500">Métricas correspondientes a: <span className="font-bold text-slate-700 capitalize">{metrics.mes}</span></p>
         </div>
         <button onClick={() => window.location.reload()} className="p-2 bg-slate-100 text-slate-600 rounded-lg hover:bg-slate-200 transition-colors">
@@ -3136,49 +3147,189 @@ function ReportsView() {
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Row 1: Financial Summary */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {/* Ingresos Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-emerald-100 overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-emerald-500"><BarChart3 className="w-24 h-24" /></div>
-          <div className="p-6 relative z-10">
-            <h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm mb-2 flex items-center">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 mr-2"></span> Total Ingresos brutos
-            </h3>
-            <div className="text-4xl font-black text-emerald-600 mb-2">
-              Q <span className={loading ? "animate-pulse bg-slate-200 text-transparent rounded" : ""}>{parseFloat(metrics.ingresos).toFixed(2)}</span>
+        <div className="bg-white rounded-xl shadow-sm border border-emerald-100 overflow-hidden relative lg:col-span-1">
+          <div className="p-5">
+            <h3 className="text-slate-500 font-bold uppercase tracking-wider text-[10px] mb-2">Total Ingresos</h3>
+            <div className="text-2xl font-black text-emerald-600">
+              Q <span className={loading ? "animate-pulse" : ""}>{parseFloat(metrics.ingresos).toLocaleString()}</span>
             </div>
-            <p className="text-sm font-medium text-emerald-700 bg-emerald-50 inline-block px-2 py-1 rounded">Ventas totales del mes</p>
+            <p className="text-[10px] text-emerald-700 mt-1">Bruto mensual</p>
           </div>
         </div>
 
         {/* Costos Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-rose-100 overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-rose-500"><CreditCard className="w-24 h-24" /></div>
-          <div className="p-6 relative z-10">
-            <h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm mb-2 flex items-center">
-              <span className="w-2 h-2 rounded-full bg-rose-500 mr-2"></span> Costo de Ventas (PMP)
-            </h3>
-            <div className="text-4xl font-black text-rose-600 mb-2">
-              Q <span className={loading ? "animate-pulse bg-slate-200 text-transparent rounded" : ""}>{parseFloat(metrics.costos).toFixed(2)}</span>
+        <div className="bg-white rounded-xl shadow-sm border border-rose-100 overflow-hidden lg:col-span-1">
+          <div className="p-5">
+            <h3 className="text-slate-500 font-bold uppercase tracking-wider text-[10px] mb-2">Costo Inventario</h3>
+            <div className="text-2xl font-black text-rose-600">
+              Q <span className={loading ? "animate-pulse" : ""}>{parseFloat(metrics.costos).toLocaleString()}</span>
             </div>
-            <p className="text-sm font-medium text-rose-700 bg-rose-50 inline-block px-2 py-1 rounded">Valor histórico del inventario vendido</p>
+            <p className="text-[10px] text-rose-700 mt-1">Costo de ventas (PMP)</p>
           </div>
         </div>
 
-        {/* Utilidad Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-indigo-100 overflow-hidden relative">
-          <div className="absolute top-0 right-0 p-4 opacity-10 text-indigo-500"><ArrowUpRight className="w-24 h-24" /></div>
-          <div className="p-6 relative z-10">
-            <h3 className="text-slate-500 font-bold uppercase tracking-wider text-sm mb-2 flex items-center">
-              <span className="w-2 h-2 rounded-full bg-indigo-500 mr-2"></span> Utilidad Bruta
-            </h3>
-            <div className="text-4xl font-black text-indigo-600 mb-2">
-              Q <span className={loading ? "animate-pulse bg-slate-200 text-transparent rounded" : ""}>{parseFloat(metrics.utilidad).toFixed(2)}</span>
+        {/* Utilidad Bruta */}
+        <div className="bg-white rounded-xl shadow-sm border border-indigo-100 overflow-hidden lg:col-span-1">
+          <div className="p-5">
+            <h3 className="text-slate-500 font-bold uppercase tracking-wider text-[10px] mb-2">Utilidad Bruta</h3>
+            <div className="text-2xl font-black text-indigo-600">
+              Q <span className={loading ? "animate-pulse" : ""}>{parseFloat(metrics.utilidad).toLocaleString()}</span>
             </div>
-            <p className="text-sm font-medium text-indigo-700 bg-indigo-50 inline-block px-2 py-1 rounded">Ingresos - Costos</p>
+            <p className="text-[10px] text-indigo-700 mt-1">Ingresos - Costos</p>
           </div>
-          <div className="h-2 bg-slate-100 w-full">
-             <div className="h-full bg-indigo-500 transition-all duration-1000" style={{ width: (metrics.ingresos > 0 ? (metrics.utilidad / metrics.ingresos) * 100 : 0) + '%' }}></div>
+        </div>
+
+        {/* Gastos Operativos */}
+        <div className="bg-white rounded-xl shadow-sm border-2 border-red-50 overflow-hidden lg:col-span-1">
+          <div className="p-5 bg-red-50/30">
+            <h3 className="text-red-800 font-bold uppercase tracking-wider text-[10px] mb-2">Gastos Operativos</h3>
+            <div className="text-2xl font-black text-red-600">
+              Q <span className={loading ? "animate-pulse" : ""}>{parseFloat(metrics.gastos).toLocaleString()}</span>
+            </div>
+            <p className="text-[10px] text-red-700 mt-1">Suma de egresos</p>
+          </div>
+        </div>
+
+        {/* Utilidad Neta (Destacada) */}
+        <div className="bg-gradient-to-br from-indigo-600 to-indigo-800 rounded-xl shadow-lg border-2 border-indigo-400 overflow-hidden lg:col-span-1 text-white">
+          <div className="p-5 relative overflow-hidden">
+            <ArrowUpRight className="absolute -right-2 -top-2 w-16 h-16 opacity-10" />
+            <h3 className="text-indigo-100 font-bold uppercase tracking-wider text-[10px] mb-2">UTILIDAD NETA</h3>
+            <div className="text-2xl font-black text-white">
+              Q <span className={loading ? "animate-pulse" : ""}>{parseFloat(metrics.utilidad_neta).toLocaleString()}</span>
+            </div>
+            <p className="text-[10px] text-indigo-200 mt-1">Balance final real</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 2: Top Products and Customers */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Top Products */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 flex items-center">
+              <Package className="w-4 h-4 mr-2 text-indigo-500" />
+              Productos Más Vendidos
+            </h3>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Top 5</span>
+          </div>
+          <div className="p-0">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
+                  <th className="px-6 py-3">Producto / Variante</th>
+                  <th className="px-6 py-3 text-right">Cantidad</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {metrics.top_products?.map((p, i) => (
+                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-medium text-slate-700">{p.name}</td>
+                    <td className="px-6 py-4 text-sm text-right font-bold text-indigo-600">{p.quantity} uds</td>
+                  </tr>
+                ))}
+                {!loading && metrics.top_products?.length === 0 && (
+                  <tr><td colSpan="2" className="px-6 py-10 text-center text-slate-400 italic text-sm">No hay datos de ventas este mes</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Top Customers */}
+        <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between">
+            <h3 className="font-bold text-slate-800 flex items-center">
+              <Users className="w-4 h-4 mr-2 text-emerald-500" />
+              Mejores Clientes (VIP)
+            </h3>
+            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Top 5</span>
+          </div>
+          <div className="p-0">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] uppercase font-bold text-slate-400">
+                  <th className="px-6 py-3">Cliente / Usuario</th>
+                  <th className="px-6 py-3 text-right">Inversión Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {metrics.top_customers?.map((c, i) => (
+                  <tr key={i} className="hover:bg-slate-50/50 transition-colors">
+                    <td className="px-6 py-4 text-sm font-medium text-slate-700">{c.name}</td>
+                    <td className="px-6 py-4 text-sm text-right font-bold text-emerald-600">Q {parseFloat(c.total).toLocaleString()}</td>
+                  </tr>
+                ))}
+                {!loading && metrics.top_customers?.length === 0 && (
+                  <tr><td colSpan="2" className="px-6 py-10 text-center text-slate-400 italic text-sm">No hay datos de clientes este mes</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Row 3: Logistics Performance */}
+      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
+          <div>
+            <h3 className="font-bold text-slate-800 text-lg flex items-center">
+              <Truck className="w-5 h-5 mr-3 text-slate-800" />
+              Efectividad Logística
+            </h3>
+            <p className="text-sm text-slate-500">Rendimiento de entregas y devoluciones del mes actual.</p>
+          </div>
+          <div className="bg-slate-50 px-6 py-3 rounded-2xl border border-slate-100 flex items-baseline gap-2">
+            <span className="text-sm font-bold text-slate-400 uppercase">Éxito:</span>
+            <span className={`text-3xl font-black ${metrics.logistics.success_rate >= 80 ? 'text-emerald-600' : 'text-amber-600'}`}>
+              {metrics.logistics.success_rate}%
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="space-y-6">
+            <div className="flex justify-between items-end mb-1">
+              <span className="text-sm font-bold text-slate-700">Tasa de Entrega Exitosa</span>
+              <span className="text-xs font-bold text-emerald-600">{metrics.logistics.delivered} / {metrics.logistics.total}</span>
+            </div>
+            <div className="h-4 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+              <div 
+                className="h-full bg-emerald-500 transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.3)]" 
+                style={{ width: metrics.logistics.success_rate + '%' }}
+              ></div>
+            </div>
+            <p className="text-xs text-slate-400 leading-relaxed italic">
+              * Porcentaje basado en pedidos con estado 'Entregado' vs Fallidos (Devueltos/Cancelados).
+            </p>
+          </div>
+
+          <div className="flex items-center justify-center border-x border-slate-100 px-8">
+            <div className="grid grid-cols-2 gap-4 w-full">
+              <div className="text-center p-4 bg-emerald-50 rounded-xl">
+                <p className="text-[10px] font-bold text-emerald-600 uppercase mb-1">Entregados</p>
+                <p className="text-2xl font-black text-emerald-700">{metrics.logistics.delivered}</p>
+              </div>
+              <div className="text-center p-4 bg-rose-50 rounded-xl">
+                <p className="text-[10px] font-bold text-rose-600 uppercase mb-1">Fallidos</p>
+                <p className="text-2xl font-black text-rose-700">{metrics.logistics.failed}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col justify-center">
+              <div className="bg-slate-900 rounded-xl p-5 text-white relative overflow-hidden">
+                <div className="relative z-10">
+                  <p className="text-indigo-400 text-xs font-bold uppercase tracking-tighter mb-1">Volumen Total</p>
+                  <p className="text-3xl font-black">{metrics.logistics.total}</p>
+                  <p className="text-[10px] text-slate-400 mt-2">Envíos gestionados vía logística</p>
+                </div>
+                <Truck className="absolute -right-4 -bottom-4 w-20 h-20 text-white/5 rotate-12" />
+              </div>
           </div>
         </div>
       </div>
