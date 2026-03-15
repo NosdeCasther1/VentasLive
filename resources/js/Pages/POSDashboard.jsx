@@ -30,10 +30,15 @@ import {
   Store,
   PlusCircle,
   UserPlus,
-  XCircle
+  XCircle,
+  BookOpen,
+  Bike,
+  Boxes
 } from 'lucide-react';
-import { Head, useForm, router } from '@inertiajs/react';
+import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';
+import Swal from 'sweetalert2';
+import AccountingReports from './Reports/AccountingReports';
 
 export default function POSDashboard({ products, categories, suppliers, customers = [], deliveries = [], analytics = {} }) {
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -60,11 +65,14 @@ export default function POSDashboard({ products, categories, suppliers, customer
           <NavItem id="pos" label="Nueva Venta (Post-Live)" icon={<ShoppingCart size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem id="pedidos" label="Logística y Envíos" icon={<Truck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} badge={deliveries.length > 0 ? deliveries.length : null} />
           <NavItem id="inventario" label="Inventario" icon={<Package size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavExternalLink href={route('logistics.driver.index')} label="Módulo Motoristas" icon={<Bike size={20} />} />
           
           <div className="mt-6 mb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administración</div>
           <NavItem id="clientes" label="Directorio de Clientes" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem id="proveedores" label="Proveedores" icon={<Store size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem id="reportes" label="Reportes" icon={<BarChart3 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem id="contabilidad" label="Libros Contables" icon={<BookOpen size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavItem id="gastos" label="Control de Gastos" icon={<CreditCard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem id="configuracion" label="Configuración" icon={<Settings size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
         </nav>
 
@@ -118,11 +126,13 @@ export default function POSDashboard({ products, categories, suppliers, customer
           {activeTab === 'clientes' && <CustomersView customers={customers} />}
           {activeTab === 'proveedores' && <SuppliersView suppliers={suppliers} />}
           {activeTab === 'reportes' && <ReportsView />}
-          {['clientes', 'configuracion'].includes(activeTab) && (
+          {activeTab === 'contabilidad' && <AccountingReports />}
+          {activeTab === 'gastos' && <ExpensesView />}
+          {activeTab === 'configuracion' && (
             <div className="h-full flex flex-col items-center justify-center text-slate-400">
               <Settings className="w-16 h-16 mb-4 opacity-20" />
               <h2 className="text-xl font-medium">Módulo en Desarrollo</h2>
-              <p>Esta sección corresponde a {activeTab}.</p>
+              <p>Esta sección corresponde a la configuración avanzada.</p>
             </div>
           )}
         </div>
@@ -2974,6 +2984,248 @@ function NavItem({ id, label, icon, activeTab, setActiveTab, badge }) {
         </span>
       )}
     </button>
+  );
+}
+
+
+function ExpensesView() {
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingExpense, setEditingExpense] = useState(null);
+  
+  const categories = ['Publicidad', 'Alquiler', 'Servicios', 'Suministros', 'Transporte', 'Otros'];
+  
+  const { data, setData, post, put, delete: destroy, processing, reset } = useForm({
+    description: '',
+    amount: '',
+    category: 'Otros',
+    expense_date: new Date().toISOString().split('T')[0]
+  });
+
+  const loadExpenses = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.get(route('expenses.api.index'));
+      setExpenses(response.data);
+    } catch (error) {
+      console.error("Error loading expenses", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadExpenses();
+  }, []);
+
+  const openEditModal = (expense) => {
+    setEditingExpense(expense);
+    setData({
+      description: expense.description,
+      amount: expense.amount,
+      category: expense.category,
+      expense_date: expense.expense_date
+    });
+    setIsModalOpen(true);
+  };
+
+  const handleDelete = async (id) => {
+    if (confirm('¿Eliminar este gasto?')) {
+      router.delete(route('expenses.destroy', id), {
+        onSuccess: () => loadExpenses()
+      });
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (editingExpense) {
+      router.put(route('expenses.update', editingExpense.id), data, {
+        onSuccess: () => {
+          setIsModalOpen(false);
+          reset();
+          loadExpenses();
+          Swal.fire('¡Éxito!', 'Gasto actualizado correctamente', 'success');
+        }
+      });
+    } else {
+      router.post(route('expenses.store'), data, {
+        onSuccess: () => {
+          setIsModalOpen(false);
+          reset();
+          loadExpenses();
+          Swal.fire('¡Éxito!', 'Gasto registrado correctamente', 'success');
+        }
+      });
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Control de Gastos Operativos</h2>
+          <p className="text-slate-500">Registra y administra todos los egresos de la tienda</p>
+        </div>
+        <button 
+          onClick={() => { setEditingExpense(null); reset(); setIsModalOpen(true); }}
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2.5 rounded-xl font-bold flex items-center shadow-lg shadow-indigo-200 transition-all"
+        >
+          <PlusCircle className="w-5 h-5 mr-2" /> Nuevo Gasto
+        </button>
+      </div>
+
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Fecha</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Descripción</th>
+                <th className="px-6 py-4 text-xs font-bold text-slate-400 uppercase tracking-wider">Categoría</th>
+                <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Monto</th>
+                <th className="px-6 py-4 text-right text-xs font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {loading ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-8 text-center"><Loader2 className="w-8 h-8 animate-spin mx-auto text-indigo-500" /></td>
+                </tr>
+              ) : expenses.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-6 py-12 text-center text-slate-400">
+                    <CreditCard className="w-12 h-12 mx-auto mb-3 opacity-20" />
+                    <p>No hay gastos registrados en este mes.</p>
+                  </td>
+                </tr>
+              ) : (
+                expenses.map(expense => (
+                  <tr key={expense.id} className="hover:bg-slate-50 transition-colors group">
+                    <td className="px-6 py-4 text-sm text-slate-600">
+                      {new Date(expense.expense_date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4">
+                      <p className="font-bold text-slate-800">{expense.description}</p>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                        {expense.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-black text-rose-600">
+                      Q {parseFloat(expense.amount).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 text-right">
+                      <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => openEditModal(expense)} className="p-2 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"><Edit className="w-4 h-4" /></button>
+                        <button onClick={() => handleDelete(expense.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col">
+            <div className="px-6 py-4 bg-slate-100 border-b border-slate-200 flex justify-between items-center shrink-0">
+              <h3 className="font-bold text-slate-800 text-lg">{editingExpense ? 'Editar Gasto' : 'Registrar Nuevo Gasto'}</h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 bg-white p-1 rounded-full"><XCircle className="w-6 h-6" /></button>
+            </div>
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1 tracking-wider">Descripción del Gasto</label>
+                <input 
+                  type="text" 
+                  value={data.description} 
+                  onChange={e => setData('description', e.target.value)} 
+                  required 
+                  placeholder="Ej. Publicidad Facebook, Bolsas, etc." 
+                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 focus:bg-white focus:border-indigo-500 outline-none shadow-sm transition-all" 
+                />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1 tracking-wider">Monto (Q)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 text-slate-400 font-bold text-sm">Q</span>
+                    <input 
+                      type="number" 
+                      step="0.01" 
+                      min="0"
+                      value={data.amount} 
+                      onChange={e => setData('amount', e.target.value)} 
+                      required
+                      placeholder="0.00" 
+                      className="w-full pl-8 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-lg focus:bg-white focus:border-rose-500 outline-none font-bold text-rose-600 shadow-sm transition-all" 
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-400 uppercase mb-1 tracking-wider">Fecha</label>
+                  <input 
+                    type="date" 
+                    value={data.expense_date} 
+                    onChange={e => setData('expense_date', e.target.value)} 
+                    required 
+                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 focus:bg-white focus:border-indigo-500 outline-none shadow-sm transition-all" 
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-400 uppercase mb-1 tracking-wider">Categoría</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {categories.map(cat => (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setData('category', cat)}
+                      className={`px-3 py-2 rounded-lg text-xs font-bold border transition-all ${
+                        data.category === cat 
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-105' 
+                          : 'bg-white text-slate-500 border-slate-200 hover:border-indigo-300'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="pt-6 flex space-x-3 mt-4 border-t border-slate-100">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="px-6 py-2.5 border border-slate-200 text-slate-600 rounded-xl hover:bg-slate-50 font-medium transition-colors">Cancelar</button>
+                <button type="submit" disabled={processing} className="flex-1 px-6 py-2.5 bg-indigo-600 text-white font-black rounded-xl hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition-all flex items-center justify-center">
+                  {processing ? <Loader2 className="w-5 h-5 animate-spin" /> : editingExpense ? 'Actualizar Gasto' : 'Confirmar Gasto'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NavExternalLink({ href, label, icon }) {
+  return (
+    <Link 
+      href={href}
+      className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-slate-400 hover:bg-slate-800 hover:text-slate-200 transition-all duration-200"
+    >
+      <div className="flex items-center">
+        <span className="mr-3 text-slate-500">{icon}</span>
+        <span className="font-medium text-sm">{label}</span>
+      </div>
+      <ChevronRight size={14} className="text-slate-600 opacity-60" />
+    </Link>
   );
 }
 

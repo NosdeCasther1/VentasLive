@@ -27,3 +27,19 @@ Route::post('api/live/remove-item', [\App\Http\Controllers\LiveController::class
 Route::post('api/live/cancel-bag/{sale}', [\App\Http\Controllers\LiveController::class, 'cancelBag'])->name('live.cancelBag');
 Route::post('api/live/checkout/{sale}', [\App\Http\Controllers\LiveController::class, 'checkout'])->name('live.checkout');
 Route::post('/live/process-ai', [\App\Http\Controllers\LiveController::class, 'processAI'])->name('live.processAI');
+// Drivers Routes
+Route::get('logistics/driver', [\App\Http\Controllers\LogisticsController::class, 'driverIndex'])->name('logistics.driver.index');
+Route::patch('logistics/driver/{sale}/delivered', [\App\Http\Controllers\LogisticsController::class, 'markAsDelivered'])->name('logistics.driver.delivered');
+Route::patch('logistics/driver/{sale}/returned', [\App\Http\Controllers\LogisticsController::class, 'markAsReturned'])->name('logistics.driver.returned');
+
+// Expenses Routes
+Route::resource('expenses', \App\Http\Controllers\ExpenseController::class)->except(['create', 'show', 'edit']);
+Route::get('api/expenses', [\App\Http\Controllers\ExpenseController::class, 'index'])->name('expenses.api.index');
+
+// Accounting Routes
+Route::get('reports/accounting', [\App\Http\Controllers\AccountingController::class, 'index'])->name('reports.accounting');
+Route::get('api/accounting/diario', [\App\Http\Controllers\AccountingController::class, 'getDiario'])->name('api.accounting.diario');
+Route::get('api/accounting/mayor', [\App\Http\Controllers\AccountingController::class, 'getMayor'])->name('api.accounting.mayor');
+Route::get('api/accounting/estado-resultados', [\App\Http\Controllers\AccountingController::class, 'getEstadoResultados'])->name('api.accounting.estado-resultados');
+Route::get('api/accounting/export/pdf', [\App\Http\Controllers\AccountingController::class, 'exportPdf'])->name('api.accounting.export.pdf');
+Route::get('api/accounting/export/excel', [\App\Http\Controllers\AccountingController::class, 'exportExcel'])->name('api.accounting.export.excel');
