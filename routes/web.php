@@ -43,3 +43,9 @@ Route::get('api/accounting/mayor', [\App\Http\Controllers\AccountingController::
 Route::get('api/accounting/estado-resultados', [\App\Http\Controllers\AccountingController::class, 'getEstadoResultados'])->name('api.accounting.estado-resultados');
 Route::get('api/accounting/export/pdf', [\App\Http\Controllers\AccountingController::class, 'exportPdf'])->name('api.accounting.export.pdf');
 Route::get('api/accounting/export/excel', [\App\Http\Controllers\AccountingController::class, 'exportExcel'])->name('api.accounting.export.excel');
+
+// Configuration Routes
+Route::get('settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
+Route::post('settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
+Route::resource('users', \App\Http\Controllers\UserController::class)->except(['index', 'create', 'show', 'edit']);
+

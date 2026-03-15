@@ -22,6 +22,8 @@ class ProductController extends Controller
                 ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
                 ->orderBy('created_at', 'desc')
                 ->get(),
+            'settings' => \App\Models\Setting::all()->pluck('value', 'key'),
+            'users' => \App\Models\User::all(),
         ]);
     }
 

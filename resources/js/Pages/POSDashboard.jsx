@@ -39,8 +39,9 @@ import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import AccountingReports from './Reports/AccountingReports';
+import SettingsIndex from './Settings/Index';
 
-export default function POSDashboard({ products, categories, suppliers, customers = [], deliveries = [], analytics = {} }) {
+export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [] }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [posInitialAction, setPosInitialAction] = useState(null);
 
@@ -70,20 +71,25 @@ export default function POSDashboard({ products, categories, suppliers, customer
           <div className="mt-6 mb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administración</div>
           <NavItem id="clientes" label="Directorio de Clientes" icon={<Users size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem id="proveedores" label="Proveedores" icon={<Store size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem id="reportes" label="Reportes" icon={<BarChart3 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem id="contabilidad" label="Libros Contables" icon={<BookOpen size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem id="gastos" label="Control de Gastos" icon={<CreditCard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
-          <NavItem id="configuracion" label="Configuración" icon={<Settings size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+          
+          {(auth?.user?.role === 'admin' || !auth?.user) && (
+            <>
+              <NavItem id="reportes" label="Reportes" icon={<BarChart3 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+              <NavItem id="contabilidad" label="Libros Contables" icon={<BookOpen size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+              <NavItem id="gastos" label="Control de Gastos" icon={<CreditCard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+              <NavItem id="configuracion" label="Configuración" icon={<Settings size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+            </>
+          )}
         </nav>
 
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center space-x-3 cursor-pointer hover:bg-slate-800 p-2 rounded-lg transition-colors">
-            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white">
-              AD
+            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white text-xs">
+              {auth?.user ? auth.user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'AD'}
             </div>
             <div>
-              <p className="text-sm font-medium text-white">Admin Principal</p>
-              <p className="text-xs text-slate-400">Sucursal Huehuetenango</p>
+              <p className="text-sm font-medium text-white">{auth?.user ? auth.user.name : 'Admin Principal'}</p>
+              <p className="text-xs text-slate-400 capitalize">{auth?.user ? auth.user.role : 'Administrador'} - Sucursal Central</p>
             </div>
           </div>
         </div>
@@ -128,13 +134,7 @@ export default function POSDashboard({ products, categories, suppliers, customer
           {activeTab === 'reportes' && <ReportsView />}
           {activeTab === 'contabilidad' && <AccountingReports />}
           {activeTab === 'gastos' && <ExpensesView />}
-          {activeTab === 'configuracion' && (
-            <div className="h-full flex flex-col items-center justify-center text-slate-400">
-              <Settings className="w-16 h-16 mb-4 opacity-20" />
-              <h2 className="text-xl font-medium">Módulo en Desarrollo</h2>
-              <p>Esta sección corresponde a la configuración avanzada.</p>
-            </div>
-          )}
+          {activeTab === 'configuracion' && <SettingsIndex settings={settings} users={users} />}
         </div>
       </main>
 
