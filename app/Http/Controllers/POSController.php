@@ -10,6 +10,9 @@ use App\Models\SaleDetail;
 use App\Models\ProductVariant;
 use Illuminate\Support\Facades\DB;
 
+use App\Models\User;
+use App\Notifications\LowStockNotification;
+
 class POSController extends Controller
 {
     public function index()
@@ -148,6 +151,15 @@ class POSController extends Controller
                 }
                 
                 $variant->save();
+
+                // Notification check
+                if ($variant->stock <= 2) {
+                    $admins = User::where('role', 'admin')->get();
+                    $notification = new LowStockNotification($variant->product->name . " ({$variant->size} {$variant->color})", $variant->stock);
+                    foreach ($admins as $admin) {
+                        $admin->notify($notification);
+                    }
+                }
             }
 
             return $sale->id;

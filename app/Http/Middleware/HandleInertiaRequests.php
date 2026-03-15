@@ -43,7 +43,14 @@ class HandleInertiaRequests extends Middleware
                 'sale' => fn () => $request->session()->get('sale'),
             ],
             'auth' => [
-                'user' => $request->user(),
+                'user' => $request->user() ? [
+                    'id' => $request->user()->id,
+                    'name' => $request->user()->name,
+                    'email' => $request->user()->email,
+                    'role' => $request->user()->role,
+                    'unread_notifications_count' => $request->user()->unreadNotifications->count(),
+                    'notifications' => $request->user()->notifications()->latest()->limit(10)->get(),
+                ] : null,
             ],
         ];
     }

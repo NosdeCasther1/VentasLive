@@ -49,3 +49,6 @@ Route::get('settings', [\App\Http\Controllers\SettingController::class, 'index']
 Route::post('settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
 Route::resource('users', \App\Http\Controllers\UserController::class)->except(['index', 'create', 'show', 'edit']);
 
+// Notification Routes
+Route::post('notifications/{id}/mark-as-read', [\App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
+Route::post('notifications/mark-all-as-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.markAllAsRead');

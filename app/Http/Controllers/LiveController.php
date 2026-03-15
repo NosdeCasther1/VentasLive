@@ -9,6 +9,8 @@ use App\Models\Customer;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use App\Notifications\LowStockNotification;
+use App\Models\User;
 use Inertia\Inertia;
 
 class LiveController extends Controller
@@ -23,19 +25,30 @@ class LiveController extends Controller
 
         return DB::transaction(function () use ($request) {
             // 1. Get or create the live_draft sale for this social_handle
-            // Note: We use social_handle as the primary key for live bags
-            $sale = Sale::firstOrCreate(
-                [
+            $sale = Sale::where('social_handle', $request->social_handle)
+                ->where('status', 'live_draft')
+                ->first();
+            
+            $isNewBag = !$sale;
+
+            if ($isNewBag) {
+                $sale = Sale::create([
                     'social_handle' => $request->social_handle,
                     'status' => 'live_draft',
-                ],
-                [
-                    'customer_name' => $request->social_handle, // Use handle as name initially
+                    'customer_name' => $request->social_handle,
                     'sale_type' => 'delivery',
                     'total' => 0,
                     'shipping_status' => 'pending_confirmation',
-                ]
-            );
+                ]);
+
+                // Notify admins about pending bags
+                $count = Sale::where('status', 'live_draft')->count();
+                $admins = User::where('role', 'admin')->get();
+                $notification = new \App\Notifications\PendingLiveBagsNotification($count);
+                foreach ($admins as $admin) {
+                    $admin->notify($notification);
+                }
+            }
 
             // 2. Lock and check inventory
             $variant = ProductVariant::lockForUpdate()->findOrFail($request->variant_id);
@@ -67,6 +80,15 @@ class LiveController extends Controller
 
             // 5. Update sale total
             $sale->increment('total', $variant->selling_price * $request->quantity);
+
+            // 6. Check for Low Stock Notification
+            if ($variant->stock <= 2) {
+                $admins = User::where('role', 'admin')->get();
+                $notification = new LowStockNotification($variant->product->name . " ({$variant->size} {$variant->color})", $variant->stock);
+                foreach ($admins as $admin) {
+                    $admin->notify($notification);
+                }
+            }
 
             return response()->json([
                 'message' => 'Producto agregado a la bolsa',

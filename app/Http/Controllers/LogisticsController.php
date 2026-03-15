@@ -7,6 +7,9 @@ use App\Models\ProductVariant;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
+use App\Models\User;
+use App\Notifications\OrderReturnedNotification;
+
 class LogisticsController extends Controller
 {
     /**
@@ -61,6 +64,13 @@ class LogisticsController extends Controller
                     $variant->increment('stock', $detail->quantity);
                     $variant->decrement('reserved', $detail->quantity);
                 }
+            }
+
+            // Create notification for admins
+            $admins = User::where('role', 'admin')->get();
+            $notification = new OrderReturnedNotification($sale->id, $request->return_reason);
+            foreach ($admins as $admin) {
+                $admin->notify($notification);
             }
 
             return redirect()->back()->with('success', 'Pedido marcado como devuelto e inventario actualizado.');

@@ -33,7 +33,10 @@ import {
   XCircle,
   BookOpen,
   Bike,
-  Boxes
+  Boxes,
+  X,
+  Check,
+  BellRing
 } from 'lucide-react';
 import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -44,6 +47,28 @@ import SettingsIndex from './Settings/Index';
 export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [] }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   const [posInitialAction, setPosInitialAction] = useState(null);
+  const [showNotifications, setShowNotifications] = useState(false);
+
+  const unreadCount = auth?.user?.unread_notifications_count || 0;
+  const notifications = auth?.user?.notifications || [];
+
+  const handleMarkAsRead = async (id) => {
+    try {
+      await axios.post(route('notifications.markAsRead', id));
+      router.reload({ preserveScroll: true });
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await axios.post(route('notifications.markAllAsRead'));
+      router.reload({ preserveScroll: true });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+    }
+  };
 
   return (
     <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
@@ -106,10 +131,101 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
             </h1>
           </div>
           <div className="flex items-center space-x-4">
-            <button className="relative p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-            </button>
+            <div className="relative">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowNotifications(!showNotifications);
+                }}
+                className={`relative p-2 rounded-full transition-all ${showNotifications ? 'bg-indigo-50 text-indigo-600' : 'text-slate-400 hover:bg-slate-100'}`}
+              >
+                {unreadCount > 0 ? <BellRing className="w-5 h-5 animate-pulse" /> : <Bell className="w-5 h-5" />}
+                {unreadCount > 0 && (
+                  <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full border-2 border-white flex items-center justify-center">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
+              </button>
+
+              {/* DROPDOWN DE NOTIFICACIONES */}
+              {showNotifications && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)}></div>
+                  <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden">
+                    <div className="px-4 py-3 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
+                      <h3 className="font-bold text-slate-800 text-sm">Notificaciones</h3>
+                      {unreadCount > 0 && (
+                        <button 
+                          onClick={handleMarkAllAsRead}
+                          className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                        >
+                          Marcar todo como leído
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length === 0 ? (
+                        <div className="p-8 text-center text-slate-400">
+                          <Bell className="w-8 h-8 opacity-20 mx-auto mb-2" />
+                          <p className="text-xs">No tienes notificaciones</p>
+                        </div>
+                      ) : (
+                        <div className="divide-y divide-slate-50">
+                          {notifications.map((n) => {
+                            const isUnread = !n.read_at;
+                            const type = n.data?.type;
+                            const colorClass = type === 'return' ? 'bg-red-50 text-red-600' : 
+                                               type === 'stock' ? 'bg-amber-50 text-amber-600' : 
+                                               'bg-indigo-50 text-indigo-600';
+                            const icon = type === 'return' ? <XCircle className="w-4 h-4" /> :
+                                         type === 'stock' ? <Package className="w-4 h-4" /> :
+                                         <Bell className="w-4 h-4" />;
+
+                            return (
+                              <div key={n.id} className={`p-4 flex items-start space-x-3 hover:bg-slate-50 transition-colors ${isUnread ? 'bg-indigo-50/30' : ''}`}>
+                                <div className={`p-2 rounded-lg shrink-0 ${colorClass}`}>
+                                  {icon}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className={`text-xs leading-snug ${isUnread ? 'font-bold text-slate-900' : 'text-slate-600'}`}>
+                                    {n.data?.message}
+                                  </p>
+                                  <p className="text-[10px] text-slate-400 mt-1">
+                                    {new Date(n.created_at).toLocaleString()}
+                                  </p>
+                                </div>
+                                {isUnread && (
+                                  <button 
+                                    onClick={() => handleMarkAsRead(n.id)}
+                                    className="p-1 text-slate-300 hover:text-indigo-600 transition-colors"
+                                    title="Marcar como leída"
+                                  >
+                                    <Check className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                    {notifications.length > 0 && (
+                      <div className="px-4 py-3 border-t border-slate-100 bg-slate-50 flex flex-col items-center space-y-2">
+                        {unreadCount > 0 && (
+                          <button 
+                            onClick={handleMarkAllAsRead}
+                            className="text-xs text-indigo-600 hover:text-indigo-800 font-bold"
+                          >
+                            Marcar todas como leídas
+                          </button>
+                        )}
+                        <p className="text-[10px] text-slate-400 uppercase font-bold tracking-wider">Mostrando últimas {notifications.length}</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
             {activeTab !== 'live' && (
               <button 
                 onClick={() => setActiveTab('live')}
