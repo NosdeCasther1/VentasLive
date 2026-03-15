@@ -41,7 +41,9 @@ import {
   Printer,
   FileSpreadsheet,
   History,
-  MinusCircle
+  MinusCircle,
+  LogOut,
+  UserCircle
 } from 'lucide-react';
 import { Head, useForm, router, Link } from '@inertiajs/react';
 import axios from 'axios';
@@ -49,8 +51,11 @@ import Swal from 'sweetalert2';
 import AccountingReports from './Reports/AccountingReports';
 import SettingsIndex from './Settings/Index';
 
-export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [] }) {
+export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [], activeSession = null }) {
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [currentSession, setCurrentSession] = useState(activeSession);
+  const [sessionTimer, setSessionTimer] = useState('00:00:00');
   const [posInitialAction, setPosInitialAction] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
 
@@ -72,6 +77,113 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
       router.reload({ preserveScroll: true });
     } catch (error) {
       console.error("Error marking all notifications as read:", error);
+    }
+  };
+
+  // Lógica del Temporizador para el Live
+  useEffect(() => {
+    let interval = null;
+    if (currentSession && currentSession.status === 'active') {
+      const startTime = new Date(currentSession.started_at).getTime();
+      
+      const updateTimer = () => {
+        const now = new Date().getTime();
+        const diff = now - startTime;
+        
+        if (diff < 0) return;
+        
+        const hours = Math.floor(diff / (1000 * 60 * 60));
+        const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+        
+        setSessionTimer(
+          `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
+        );
+      };
+      
+      updateTimer(); // Primera ejecución inmediata
+      interval = setInterval(updateTimer, 1000);
+    } else {
+      setSessionTimer('00:00:00');
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [currentSession]);
+
+  const handleStartLive = async () => {
+    const { value: sessionName } = await Swal.fire({
+      title: 'Iniciar Nueva Transmisión',
+      input: 'text',
+      inputLabel: 'Nombre de la Transmisión',
+      inputPlaceholder: 'Ej. Ropa de Verano - 15 Marzo',
+      showCancelButton: true,
+      confirmButtonText: 'Iniciar Live',
+      cancelButtonText: 'Cancelar',
+      confirmButtonColor: '#ef4444',
+      inputValidator: (value) => {
+        if (!value) return '¡Necesitas un nombre para la transmisión!';
+      }
+    });
+
+    if (sessionName) {
+      try {
+        const response = await axios.post(route('live.sessions.start'), { name: sessionName });
+        setCurrentSession(response.data);
+        setActiveTab('live');
+        Swal.fire({
+          title: '¡Live Iniciado!',
+          text: `La transmisión "${sessionName}" ha comenzado.`,
+          icon: 'success',
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 3000
+        });
+      } catch (error) {
+        console.error("Error starting session:", error);
+        Swal.fire('Error', 'No se pudo iniciar la sesión.', 'error');
+      }
+    }
+  };
+
+  const handleEndLive = async () => {
+    if (!currentSession) return;
+
+    const result = await Swal.fire({
+      title: '¿Finalizar Transmisión?',
+      text: "Se detendrá el cronómetro y se marcará la sesión como terminada.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, finalizar ahora',
+      cancelButtonText: 'Seguir en vivo'
+    });
+
+    if (result.isConfirmed) {
+      try {
+        const response = await axios.post(route('live.sessions.end', currentSession.id));
+        const data = response.data;
+        
+        setCurrentSession(null);
+        
+        Swal.fire({
+          title: 'Transmisión Finalizada',
+          html: `
+            <div class="text-left space-y-2 mt-4">
+              <p><strong>DURACIÓN:</strong> ${sessionTimer}</p>
+              <p><strong>BOLSAS APARTADAS:</strong> ${data.bags_count} artículos</p>
+            </div>
+          `,
+          icon: 'success',
+          confirmButtonText: 'Entendido'
+        });
+      } catch (error) {
+        console.error("Error ending session:", error);
+        Swal.fire('Error', 'No se pudo finalizar la sesión.', 'error');
+      }
     }
   };
 
@@ -113,15 +225,47 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           )}
         </nav>
 
-        <div className="p-4 border-t border-slate-800">
-          <div className="flex items-center space-x-3 cursor-pointer hover:bg-slate-800 p-2 rounded-lg transition-colors">
-            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white text-xs">
+        <div className="p-4 border-t border-slate-800 relative">
+          {showUserMenu && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)}></div>
+              <div className="absolute bottom-full left-4 mb-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 z-50 overflow-hidden py-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+                <div className="px-4 py-2 border-b border-slate-100 bg-slate-50">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Menú de Usuario</p>
+                </div>
+                <Link 
+                  href="/profile" 
+                  className="w-full flex items-center px-4 py-3 text-sm text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <UserCircle className="w-4 h-4 mr-3 text-slate-400" />
+                  Mi Perfil
+                </Link>
+                <form method="POST" action={route('logout')} className="w-full">
+                  <input type="hidden" name="_token" value={document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')} />
+                  <button 
+                    type="submit"
+                    className="w-full flex items-center px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition-colors border-t border-slate-100"
+                  >
+                    <LogOut className="w-4 h-4 mr-3 text-red-500" />
+                    Cerrar Sesión
+                  </button>
+                </form>
+              </div>
+            </>
+          )}
+
+          <div 
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className={`flex items-center space-x-3 cursor-pointer p-2 rounded-lg transition-all ${showUserMenu ? 'bg-slate-800' : 'hover:bg-slate-800'}`}
+          >
+            <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center font-bold text-white text-xs border border-slate-600">
               {auth?.user ? auth.user.name.split(' ').map(n => n[0]).join('').toUpperCase() : 'AD'}
             </div>
-            <div>
-              <p className="text-sm font-medium text-white">{auth?.user ? auth.user.name : 'Admin Principal'}</p>
-              <p className="text-xs text-slate-400 capitalize">{auth?.user ? auth.user.role : 'Administrador'} - Sucursal Central</p>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-white truncate">{auth?.user ? auth.user.name : 'Admin Principal'}</p>
+              <p className="text-xs text-slate-400 capitalize truncate">{auth?.user ? auth.user.role : 'Administrador'}</p>
             </div>
+            <ChevronDown size={14} className={`text-slate-500 transition-transform ${showUserMenu ? 'rotate-180' : ''}`} />
           </div>
         </div>
       </aside>
@@ -232,13 +376,25 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
                 </>
               )}
             </div>
-            {activeTab !== 'live' && (
+            {activeTab !== 'live' && !currentSession && (
               <button 
-                onClick={() => setActiveTab('live')}
+                onClick={handleStartLive}
                 className="flex items-center px-4 py-2 bg-red-50 text-red-600 font-medium rounded-full hover:bg-red-100 transition-colors border border-red-200"
               >
                 <Radio className="w-4 h-4 mr-2" />
                 Iniciar Live
+              </button>
+            )}
+            {currentSession && (
+              <button 
+                onClick={() => setActiveTab('live')}
+                className={`flex items-center px-4 py-2 font-medium rounded-full transition-colors border ${activeTab === 'live' ? 'bg-indigo-600 text-white border-indigo-700' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-100'}`}
+              >
+                <div className="relative flex h-2 w-2 mr-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
+                </div>
+                Live Activo
               </button>
             )}
           </div>
@@ -247,7 +403,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
         {/* SCROLLABLE CONTENT */}
         <div className="flex-1 overflow-y-auto p-8">
           {activeTab === 'dashboard' && <Dsh_DashboardView products={products} analytics={analytics} />}
-          {activeTab === 'live' && <LiveView products={products} />}
+          {activeTab === 'live' && <LiveView products={products} currentSession={currentSession} sessionTimer={sessionTimer} onEndLive={handleEndLive} handleStartLive={handleStartLive} />}
           {activeTab === 'pos' && <POSView products={products} initialAction={posInitialAction} setInitialAction={setPosInitialAction} />}
           {activeTab === 'inventario' && <InventoryView products={products} categories={categories} suppliers={suppliers} />}
           {activeTab === 'pedidos' && <OrdersView deliveries={deliveries} setActiveTab={setActiveTab} setPosInitialAction={setPosInitialAction} />}
@@ -415,7 +571,7 @@ function Dsh_StatCard({ title, amount, subtitle, trend, isPositive, icon, color 
 }
 
 // 2. MODO LIVE VIEW (Adaptado del diseño anterior)
-function LiveView({ products }) {
+function LiveView({ products, currentSession, sessionTimer, onEndLive, handleStartLive }) {
   const [bags, setBags] = useState([]);
   const [isLoadingBags, setIsLoadingBags] = useState(true);
 
@@ -703,10 +859,35 @@ function LiveView({ products }) {
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
             <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500"></span>
           </div>
-          <h2 className="text-xl font-bold text-slate-800">Transmisión Activa - Ropa de Verano</h2>
+          <div className="flex flex-col">
+            <h2 className="text-xl font-bold text-slate-800">
+              {currentSession ? `Transmisión Activa: ${currentSession.name}` : 'Sin Transmisión Activa'}
+            </h2>
+            {currentSession && (
+              <p className="text-xs text-slate-500 italic">Iniciada a las {new Date(currentSession.started_at).toLocaleTimeString()}</p>
+            )}
+          </div>
         </div>
-        <div className="text-slate-500 font-medium font-mono text-lg bg-white px-4 py-1 rounded-lg border border-slate-200 shadow-sm">
-          01:45:22
+        <div className="flex items-center space-x-3">
+          <div className="text-slate-500 font-medium font-mono text-lg bg-white px-4 py-1 rounded-lg border border-slate-200 shadow-sm min-w-[100px] text-center">
+            {sessionTimer}
+          </div>
+          {currentSession ? (
+            <button 
+              onClick={onEndLive}
+              className="px-4 py-1.5 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700 transition-all shadow-sm"
+            >
+              Finalizar Live
+            </button>
+          ) : (
+            <button 
+              onClick={handleStartLive}
+              className="px-6 py-1.5 bg-indigo-600 text-white text-sm font-bold rounded-lg hover:bg-indigo-700 transition-all shadow-sm flex items-center"
+            >
+              <Radio className="w-4 h-4 mr-2" />
+              Iniciar Nueva Transmisión
+            </button>
+          )}
         </div>
       </div>
 
@@ -1102,6 +1283,7 @@ function InventoryView({ products, categories, suppliers }) {
   const [editingProduct, setEditingProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [stockFilter, setStockFilter] = useState('all');
   const [expandedRows, setExpandedRows] = useState({});
   
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
@@ -1179,9 +1361,16 @@ function InventoryView({ products, categories, suppliers }) {
   };
 
   const filteredProducts = products.filter(p => {
+    const totalStock = p.variants?.reduce((sum, v) => sum + v.stock, 0) || 0;
     const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || p.category_id === parseInt(selectedCategory);
-    return matchesSearch && matchesCategory;
+    
+    let matchesStock = true;
+    if (stockFilter === 'out_of_stock') matchesStock = totalStock <= 0;
+    else if (stockFilter === 'low_stock') matchesStock = totalStock > 0 && totalStock <= 5;
+    else if (stockFilter === 'in_stock') matchesStock = totalStock > 0;
+
+    return matchesSearch && matchesCategory && matchesStock;
   });
 
   const allVariants = products.flatMap(p => (p.variants || []).map(v => ({...v, product_name: p.name})));
@@ -1239,8 +1428,21 @@ function InventoryView({ products, categories, suppliers }) {
                     ))}
                 </select>
             </div>
+            <div className="flex items-center bg-white border border-slate-300 rounded-lg shadow-sm">
+                <span className="px-3 text-slate-400"><Boxes className="w-4 h-4" /></span>
+                <select 
+                    value={stockFilter}
+                    onChange={(e) => setStockFilter(e.target.value)}
+                    className="pr-4 py-2 bg-transparent text-sm font-medium text-slate-700 outline-none border-none min-w-[130px]"
+                >
+                    <option value="all">Todo el Stock</option>
+                    <option value="in_stock">En Existencia</option>
+                    <option value="low_stock">Stock Bajo (≤ 5)</option>
+                    <option value="out_of_stock">Agotado</option>
+                </select>
+            </div>
             <a 
-                href={route('products.count-sheet', { category: selectedCategory })} 
+                href={route('products.count-sheet', { category: selectedCategory, stock: stockFilter })} 
                 target="_blank" 
                 className="flex items-center px-4 py-2 bg-slate-800 text-white font-medium rounded-lg hover:bg-slate-900 transition-all shadow-sm active:scale-95"
             >

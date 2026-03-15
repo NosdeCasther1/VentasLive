@@ -56,6 +56,8 @@ Route::middleware(['auth'])->group(function () {
         Route::post('api/live/cancel-bag/{sale}', [\App\Http\Controllers\LiveController::class, 'cancelBag'])->name('live.cancelBag');
         Route::post('api/live/checkout/{sale}', [\App\Http\Controllers\LiveController::class, 'checkout'])->name('live.checkout');
         Route::post('/live/process-ai', [\App\Http\Controllers\LiveController::class, 'processAI'])->name('live.processAI');
+        Route::post('api/live/sessions/start', [\App\Http\Controllers\LiveController::class, 'startSession'])->name('live.sessions.start');
+        Route::post('api/live/sessions/{session}/end', [\App\Http\Controllers\LiveController::class, 'endSession'])->name('live.sessions.end');
 
         // Drivers Routes
         Route::get('logistics/driver', [\App\Http\Controllers\LogisticsController::class, 'driverIndex'])->name('logistics.driver.index');
@@ -83,4 +85,7 @@ Route::middleware(['auth'])->group(function () {
     // Notification Routes
     Route::post('notifications/{id}/mark-as-read', [\App\Http\Controllers\NotificationController::class, 'markAsRead'])->name('notifications.markAsRead');
     Route::post('notifications/mark-all-as-read', [\App\Http\Controllers\NotificationController::class, 'markAllAsRead'])->name('notifications.markAllAsRead');
+
+    Route::get('/profile', [\App\Http\Controllers\ProfileController::class, 'edit'])->name('profile.edit');
+    Route::patch('/profile', [\App\Http\Controllers\ProfileController::class, 'update'])->name('profile.update');
 });

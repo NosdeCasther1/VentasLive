@@ -26,6 +26,7 @@ class ProductController extends Controller
                 ->get(),
             'settings' => \App\Models\Setting::all()->pluck('value', 'key'),
             'users' => \App\Models\User::all(),
+            'activeSession' => \App\Models\LiveSession::where('status', 'active')->first(),
         ]);
     }
 
@@ -108,6 +109,16 @@ class ProductController extends Controller
 
         if ($request->filled('category') && $request->category !== 'all') {
             $query->where('products.category_id', $request->category);
+        }
+
+        if ($request->filled('stock')) {
+            if ($request->stock === 'out_of_stock') {
+                $query->where('product_variants.stock', '<=', 0);
+            } elseif ($request->stock === 'low_stock') {
+                $query->where('product_variants.stock', '>', 0)->where('product_variants.stock', '<=', 5);
+            } elseif ($request->stock === 'in_stock') {
+                $query->where('product_variants.stock', '>', 0);
+            }
         }
 
         $variants = $query->orderBy('products.name')->get();

@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use App\Notifications\LowStockNotification;
 use App\Models\User;
+use App\Models\LiveSession;
 use Inertia\Inertia;
 
 class LiveController extends Controller
@@ -282,5 +283,34 @@ class LiveController extends Controller
         } catch (\Exception $e) {
             return response()->json(['error' => 'Error al cancelar la bolsa: ' . $e->getMessage()], 500);
         }
+    }
+    public function startSession(Request $request)
+    {
+        $request->validate(['name' => 'required|string|max:255']);
+
+        $session = LiveSession::create([
+            'name' => $request->name,
+            'started_at' => now(),
+            'status' => 'active',
+        ]);
+
+        return response()->json($session);
+    }
+
+    public function endSession(LiveSession $session)
+    {
+        $session->update([
+            'ended_at' => now(),
+            'status' => 'ended',
+        ]);
+
+        // Get some stats for the summary
+        $bagsCount = Sale::where('status', 'live_draft')->count();
+        
+        return response()->json([
+            'message' => 'Transmisión finalizada',
+            'duration' => $session->started_at->diffForHumans($session->ended_at, true),
+            'bags_count' => $bagsCount,
+        ]);
     }
 }
