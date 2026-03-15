@@ -91,6 +91,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           <NavItem id="pos" label="Nueva Venta (Post-Live)" icon={<ShoppingCart size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
           <NavItem id="pedidos" label="Logística y Envíos" icon={<Truck size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} badge={deliveries.length > 0 ? deliveries.length : null} />
           <NavItem id="inventario" label="Inventario" icon={<Package size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+          <NavExternalLink href={route('cash-register.index')} label="Control de Caja" icon={<Wallet size={20} />} />
           <NavExternalLink href={route('logistics.driver.index')} label="Módulo Motoristas" icon={<Bike size={20} />} />
           
           <div className="mt-6 mb-2 px-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Administración</div>

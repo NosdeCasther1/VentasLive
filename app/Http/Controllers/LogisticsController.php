@@ -34,10 +34,15 @@ class LogisticsController extends Controller
      */
     public function markAsDelivered(Sale $sale)
     {
+        $openRegister = \App\Models\CashRegister::where('user_id', auth()->id())
+            ->where('status', 'open')
+            ->first();
+
         $sale->update([
             'shipping_status' => 'delivered',
             'status' => 'completed',
             'delivered_at' => now(),
+            'cash_register_id' => $openRegister ? $openRegister->id : $sale->cash_register_id,
         ]);
 
         return redirect()->back()->with('success', 'Pedido entregado correctamente.');
@@ -71,6 +76,7 @@ class LogisticsController extends Controller
             // Create notification for admins
             $admins = User::where('role', 'admin')->get();
             $notification = new OrderReturnedNotification($sale->id, $request->return_reason);
+            /** @var \App\Models\User $admin */
             foreach ($admins as $admin) {
                 $admin->notify($notification);
             }

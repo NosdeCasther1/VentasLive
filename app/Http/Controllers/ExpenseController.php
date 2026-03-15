@@ -31,6 +31,12 @@ class ExpenseController extends Controller
             'expense_date' => 'required|date',
         ]);
 
+        $openRegister = \App\Models\CashRegister::where('user_id', auth()->id())
+            ->where('status', 'open')
+            ->first();
+            
+        $validated['cash_register_id'] = $openRegister ? $openRegister->id : null;
+
         Expense::create($validated);
 
         return redirect()->back()->with('success', 'Gasto registrado correctamente.');

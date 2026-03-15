@@ -114,6 +114,10 @@ class POSController extends Controller
                 $total += $item['price'] * $item['quantity'];
             }
 
+            $openRegister = \App\Models\CashRegister::where('user_id', auth()->id())
+                ->where('status', 'open')
+                ->first();
+
             $sale = Sale::create([
                 'customer_id' => $request->customer_id,
                 'customer_name' => $request->customer_name,
@@ -127,6 +131,7 @@ class POSController extends Controller
                 'shipping_phone' => $request->shipping_phone,
                 'shipping_cost' => $request->shipping_cost,
                 'payment_status' => $request->payment_status,
+                'cash_register_id' => ($request->payment_method === 'cash' && $openRegister) ? $openRegister->id : null,
             ]);
 
             foreach ($request->items as $item) {
@@ -156,6 +161,7 @@ class POSController extends Controller
                 if ($variant->stock <= 2) {
                     $admins = User::where('role', 'admin')->get();
                     $notification = new LowStockNotification($variant->product->name . " ({$variant->size} {$variant->color})", $variant->stock);
+                    /** @var \App\Models\User $admin */
                     foreach ($admins as $admin) {
                         $admin->notify($notification);
                     }

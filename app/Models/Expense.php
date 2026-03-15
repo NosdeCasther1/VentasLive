@@ -14,7 +14,13 @@ class Expense extends Model
         'amount',
         'category',
         'expense_date',
+        'cash_register_id',
     ];
+
+    public function cashRegister()
+    {
+        return $this->belongsTo(CashRegister::class);
+    }
 
     protected $casts = [
         'expense_date' => 'date',

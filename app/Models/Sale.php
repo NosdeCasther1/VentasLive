@@ -23,8 +23,14 @@ class Sale extends Model
         'shipping_status',
         'amount_received',
         'change',
-        'notes'
+        'notes',
+        'cash_register_id'
     ];
+
+    public function cashRegister()
+    {
+        return $this->belongsTo(CashRegister::class);
+    }
 
     public function customer()
     {
