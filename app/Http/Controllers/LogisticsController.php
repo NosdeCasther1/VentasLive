@@ -19,8 +19,8 @@ class LogisticsController extends Controller
      */
     public function driverIndex()
     {
-        $orders = Sale::with(['details.product_variant.product'])
-            ->where('shipping_status', 'shipped')
+        $orders = Sale::with(['details.productVariant.product'])
+            ->where('shipping_status', 'in_transit')
             ->orderBy('id', 'desc')
             ->get();
 

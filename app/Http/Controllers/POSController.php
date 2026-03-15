@@ -22,7 +22,7 @@ class POSController extends Controller
         $suppliers = \App\Models\Supplier::all();
         $customers = \App\Models\Customer::withCount('sales')->get();
         $deliveries = Sale::with(['details.productVariant.product'])
-            ->where('sale_type', 'delivery')
+            ->whereIn('sale_type', ['delivery', 'manual_delivery'])
             ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
             ->orderBy('created_at', 'desc')
             ->get();
@@ -289,7 +289,7 @@ class POSController extends Controller
     public function driverManifest()
     {
         $deliveries = Sale::with(['details.productVariant.product'])
-            ->where('sale_type', 'delivery')
+            ->whereIn('sale_type', ['delivery', 'manual_delivery'])
             ->where('shipping_status', 'in_transit')
             ->orderBy('created_at', 'desc')
             ->get();
