@@ -2301,9 +2301,7 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
     e.preventDefault();
     setIsSavingQuickCustomer(true);
     try {
-      console.log('Enviando datos de cliente rápido:', quickCustomerData);
       const response = await window.axios.post(route('customers.store'), quickCustomerData);
-      console.log('Respuesta del servidor:', response.data);
       if (response.data.success) {
         const newCustomer = response.data.customer;
         // Seleccionamos al nuevo cliente automáticamente
@@ -2313,12 +2311,27 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
         // Cerramos modal y reseteamos
         setIsQuickCustomerModalOpen(false);
         setQuickCustomerData({ full_name: '', social_handle: '', phone: '', default_address: '' });
-        alert('Cliente guardado y seleccionado: ' + newCustomer.full_name);
+        
+        // Notificación Toast elegante
+        Swal.fire({
+          icon: 'success',
+          title: `¡Cliente guardado y seleccionado: ${newCustomer.full_name}!`,
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 3000,
+          timerProgressBar: true
+        });
       }
     } catch (error) {
       console.error("Error al crear cliente rápido:", error);
       const errorMsg = error.response?.data?.message || 'Error al guardar el cliente. Verifique los datos.';
-      alert(errorMsg);
+      Swal.fire({
+        icon: 'error',
+        title: 'Error',
+        text: errorMsg,
+        confirmButtonColor: '#4f46e5'
+      });
     } finally {
       setIsSavingQuickCustomer(false);
     }
@@ -2350,6 +2363,7 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
   const [shippingCost, setShippingCost] = useState('');
   const [shippingPaymentStatus, setShippingPaymentStatus] = useState('Pago Contra Entrega');
   const [posDiscount, setPosDiscount] = useState('0');
+  const [posDiscountType, setPosDiscountType] = useState('fixed'); // 'fixed' o 'percentage'
 
   const inventory = products.filter(p => {
     const searchLower = searchQuery.toLowerCase();
@@ -2487,7 +2501,12 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
       }
     } catch (error) {
       console.error("Error analizando con IA:", error);
-      alert("No se pudo analizar el mensaje.");
+      Swal.fire({
+        icon: 'error',
+        title: 'Error de IA',
+        text: "No se pudo analizar el mensaje.",
+        confirmButtonColor: '#4f46e5'
+      });
     } finally {
       setIsAnalyzing(false);
     }
@@ -2497,7 +2516,12 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
 
   const openLocalPaymentModal = () => {
     if(cart.some(item => item.needs_variant)) {
-      alert("Por favor selecciona las variantes faltantes en los productos marcados en rojo en el carrito.");
+      Swal.fire({
+        icon: 'warning',
+        title: 'Variantes faltantes',
+        text: "Por favor selecciona las variantes faltantes en los productos marcados en rojo en el carrito.",
+        confirmButtonColor: '#4f46e5'
+      });
       return;
     }
     setIsLocalPaymentModalOpen(true);
@@ -2506,7 +2530,12 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
 
   const openShippingModal = () => {
     if(cart.some(item => item.needs_variant)) {
-      alert("Por favor selecciona las variantes faltantes en los productos marcados en rojo en el carrito.");
+      Swal.fire({
+        icon: 'warning',
+        title: 'Variantes faltantes',
+        text: "Por favor selecciona las variantes faltantes en los productos marcados en rojo en el carrito.",
+        confirmButtonColor: '#4f46e5'
+      });
       return;
     }
     setIsShippingModalOpen(true);
@@ -2514,12 +2543,21 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
 
   const confirmLocalPayment = () => {
     let change = 0;
-    const finalTotal = total - (parseFloat(posDiscount) || 0);
+    const subtotal = total;
+    const discountVal = parseFloat(posDiscount) || 0;
+    const finalTotal = posDiscountType === 'percentage' 
+      ? subtotal - (subtotal * (discountVal / 100))
+      : subtotal - discountVal;
     
     if (localPaymentMethod === 'Efectivo') {
         const received = parseFloat(amountReceived) || 0;
         if (received < finalTotal) {
-            alert("El monto recibido es menor al total con descuento.");
+            Swal.fire({
+              icon: 'warning',
+              title: 'Monto insuficiente',
+              text: "El monto recibido es menor al total con descuento.",
+              confirmButtonColor: '#4f46e5'
+            });
             return;
         }
         change = received - finalTotal;
@@ -2528,20 +2566,29 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
         payment_method: localPaymentMethod,
         amount_received: localPaymentMethod === 'Efectivo' ? parseFloat(amountReceived) : finalTotal,
         change: change,
-        payment_status: 'Pagado'
+        payment_status: 'Pagado',
+        discount: discountVal,
+        discount_type: posDiscountType
     });
   };
 
   const confirmShipping = () => {
     if(!shippingAddress || !shippingPhone) {
-        alert("La dirección y el teléfono son obligatorios para enviar.");
+        Swal.fire({
+          icon: 'warning',
+          title: 'Faltan datos',
+          text: "La dirección y el teléfono son obligatorios para enviar.",
+          confirmButtonColor: '#4f46e5'
+        });
         return;
     }
     submitSale('shipping', {
         shipping_address: shippingAddress,
         shipping_phone: shippingPhone,
         shipping_cost: parseFloat(shippingCost) || 0,
-        payment_status: shippingPaymentStatus
+        payment_status: shippingPaymentStatus,
+        discount: parseFloat(posDiscount) || 0,
+        discount_type: posDiscountType
     });
   };
 
@@ -2557,6 +2604,7 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
         price: item.price
       })),
       discount: parseFloat(posDiscount) || 0,
+      discount_type: posDiscountType,
       ...extraData
     };
 
@@ -2584,7 +2632,12 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
 
   const enviarTicketWhatsApp = () => {
     if (!receiptPhone) {
-      alert("Por favor ingresa un número de teléfono.");
+      Swal.fire({
+        icon: 'info',
+        title: 'Dato requerido',
+        text: "Por favor ingresa un número de teléfono.",
+        confirmButtonColor: '#4f46e5'
+      });
       return;
     }
     if (!lastSaleData) return;
@@ -2866,8 +2919,23 @@ ${itemsText}
             </div>
             <div className="p-6 space-y-5">
               <div className="bg-slate-50 p-4 rounded-xl text-center border border-slate-200">
-                <p className="text-xs font-bold text-slate-500 uppercase">Total a Cobrar</p>
-                <p className="text-3xl font-black text-indigo-700">Q {total.toFixed(2)}</p>
+                <p className="text-xs font-bold text-slate-500 uppercase">Subtotal</p>
+                <p className="text-2xl font-black text-slate-800">Q {total.toFixed(2)}</p>
+                {(parseFloat(posDiscount) > 0) && (
+                  <p className="text-xs font-bold text-amber-600 mt-1">
+                    Descuento: - Q {posDiscountType === 'percentage' 
+                      ? (total * (parseFloat(posDiscount) / 100)).toFixed(2) 
+                      : parseFloat(posDiscount).toFixed(2)}
+                  </p>
+                )}
+                <div className="mt-2 pt-2 border-t border-slate-200">
+                  <p className="text-xs font-bold text-indigo-500 uppercase">Total a Cobrar</p>
+                  <p className="text-3xl font-black text-indigo-700">
+                    Q {(posDiscountType === 'percentage' 
+                      ? total - (total * (parseFloat(posDiscount) / 100)) 
+                      : total - parseFloat(posDiscount || 0)).toFixed(2)}
+                  </p>
+                </div>
               </div>
               
               <div>
@@ -2880,9 +2948,29 @@ ${itemsText}
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-amber-600 uppercase mb-2">Descuento Especial (Q)</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-bold text-amber-600 uppercase">Ajuste / Descuento</label>
+                  <div className="flex bg-amber-100 rounded-lg p-1">
+                    <button 
+                      type="button"
+                      onClick={() => setPosDiscountType('fixed')}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${posDiscountType === 'fixed' ? 'bg-amber-600 text-white shadow-sm' : 'text-amber-600 hover:bg-amber-200'}`}
+                    >
+                      Q (Fijo)
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => setPosDiscountType('percentage')}
+                      className={`px-3 py-1 text-[10px] font-bold rounded-md transition-all ${posDiscountType === 'percentage' ? 'bg-amber-600 text-white shadow-sm' : 'text-amber-600 hover:bg-amber-200'}`}
+                    >
+                      % (Porc.)
+                    </button>
+                  </div>
+                </div>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-amber-500">Q</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-amber-500">
+                    {posDiscountType === 'percentage' ? '%' : 'Q'}
+                  </span>
                   <input 
                     type="number" 
                     step="0.01"
@@ -2901,7 +2989,7 @@ ${itemsText}
                     <span className="absolute left-4 top-1/2 -translate-y-1/2 font-bold text-slate-400">Q</span>
                     <input 
                       type="number" 
-                      min={total - (parseFloat(posDiscount) || 0)}
+                      min={posDiscountType === 'percentage' ? total - (total * (parseFloat(posDiscount) / 100)) : total - parseFloat(posDiscount || 0)}
                       step="0.01"
                       value={amountReceived} 
                       onChange={e => setAmountReceived(e.target.value)}
@@ -2909,10 +2997,10 @@ ${itemsText}
                       className="w-full pl-9 pr-4 py-3 border border-slate-300 rounded-lg bg-white outline-none focus:border-indigo-500 text-lg font-bold shadow-sm"
                     />
                   </div>
-                  {(parseFloat(amountReceived) > (total - (parseFloat(posDiscount) || 0))) && (
+                  {(parseFloat(amountReceived) > (posDiscountType === 'percentage' ? total - (total * (parseFloat(posDiscount) / 100)) : total - parseFloat(posDiscount || 0))) && (
                     <div className="mt-3 flex justify-between items-center bg-emerald-50 text-emerald-700 p-3 rounded-lg border border-emerald-200">
                       <span className="text-xs font-bold uppercase">Su Cambio:</span>
-                      <span className="text-lg font-black">Q {(parseFloat(amountReceived) - (total - (parseFloat(posDiscount) || 0))).toFixed(2)}</span>
+                      <span className="text-lg font-black">Q {(parseFloat(amountReceived) - (posDiscountType === 'percentage' ? total - (total * (parseFloat(posDiscount) / 100)) : total - parseFloat(posDiscount || 0))).toFixed(2)}</span>
                     </div>
                   )}
                 </div>
@@ -2920,7 +3008,7 @@ ${itemsText}
 
               <button 
                 onClick={confirmLocalPayment}
-                disabled={localPaymentMethod === 'Efectivo' && (!amountReceived || parseFloat(amountReceived) < (total - (parseFloat(posDiscount) || 0)))}
+                disabled={localPaymentMethod === 'Efectivo' && (!amountReceived || parseFloat(amountReceived) < (posDiscountType === 'percentage' ? total - (total * (parseFloat(posDiscount) / 100)) : total - parseFloat(posDiscount || 0)))}
                 className="w-full bg-emerald-500 hover:bg-emerald-600 disabled:bg-slate-300 disabled:text-slate-500 text-white font-bold py-3.5 rounded-xl shadow-md transition-colors flex justify-center items-center text-sm"
               >
                 <CheckCircle2 className="w-5 h-5 mr-2" /> Confirmar Pago
@@ -2975,14 +3063,27 @@ ${itemsText}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                   <label className="block text-xs font-bold text-amber-600 uppercase mb-1">Descuento (Q)</label>
-                   <input type="number" step="0.01" value={posDiscount} onChange={e => setPosDiscount(e.target.value)} className="w-full border border-amber-200 rounded-lg p-2.5 bg-amber-50 focus:bg-white focus:border-amber-500 outline-none shadow-sm text-sm font-bold text-amber-700" placeholder="0.00" />
+                   <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[10px] font-bold text-amber-600 uppercase">Tipo Desc.</label>
+                      <div className="flex bg-amber-100 rounded p-0.5">
+                        <button type="button" onClick={() => setPosDiscountType('fixed')} className={`px-1.5 py-0.5 text-[8px] font-bold rounded ${posDiscountType === 'fixed' ? 'bg-amber-600 text-white' : 'text-amber-600'}`}>Q</button>
+                        <button type="button" onClick={() => setPosDiscountType('percentage')} className={`px-1.5 py-0.5 text-[8px] font-bold rounded ${posDiscountType === 'percentage' ? 'bg-amber-600 text-white' : 'text-amber-600'}`}>%</button>
+                      </div>
+                   </div>
+                   <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 font-bold text-amber-500 text-xs">{posDiscountType === 'percentage' ? '%' : 'Q'}</span>
+                    <input type="number" step="0.01" value={posDiscount} onChange={e => setPosDiscount(e.target.value)} className="w-full border border-amber-200 rounded-lg pl-7 pr-2 py-2 bg-amber-50 focus:bg-white focus:border-amber-500 outline-none shadow-sm text-sm font-bold text-amber-700" placeholder="0.00" />
+                   </div>
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex justify-between items-center">
                 <span className="font-bold text-slate-600">Total a Cobrar:</span>
-                <span className="text-2xl font-black text-indigo-700">Q {(total - (parseFloat(posDiscount) || 0) + (parseFloat(shippingCost) || 0)).toFixed(2)}</span>
+                <span className="text-2xl font-black text-indigo-700">
+                  Q {( (posDiscountType === 'percentage' 
+                      ? total - (total * (parseFloat(posDiscount) / 100)) 
+                      : total - parseFloat(posDiscount || 0)) + (parseFloat(shippingCost) || 0) ).toFixed(2)}
+                </span>
               </div>
 
               <button 
