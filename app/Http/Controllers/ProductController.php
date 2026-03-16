@@ -15,15 +15,59 @@ class ProductController extends Controller
 {
     public function index()
     {
+        $products = Product::with(['category', 'variants'])->get();
+        $categories = Category::all();
+        $suppliers = Supplier::all();
+        $customers = \App\Models\Customer::withCount('sales')
+            ->orderBy('full_name', 'asc')
+            ->get();
+        $deliveries = \App\Models\Sale::with(['details.productVariant.product'])
+            ->whereIn('sale_type', ['delivery', 'manual_delivery'])
+            ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        // --- DASHBOARD ANALYTICS ---
+        $today = \Carbon\Carbon::today();
+        $salesToday = \App\Models\Sale::whereDate('created_at', $today)
+            ->where('status', 'completed')
+            ->sum('total');
+
+        $weeklyPerformance = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = \Carbon\Carbon::today()->subDays($i);
+            $dayName = $date->translatedFormat('D');
+            $amount = \App\Models\Sale::whereDate('created_at', $date)
+                ->where('status', 'completed')
+                ->sum('total');
+            $weeklyPerformance[] = ['day' => $dayName, 'amount' => $amount];
+        }
+
+        $recentActivity = \App\Models\Sale::with(['customer'])
+            ->orderBy('created_at', 'desc')
+            ->limit(8)
+            ->get()
+            ->map(function($sale) {
+                $time = $sale->created_at->diffForHumans();
+                $icon = $sale->status === 'live_draft' ? 'ShoppingBag' : 'CheckCircle2';
+                $color = $sale->status === 'live_draft' ? 'indigo' : 'emerald';
+                $identifier = $sale->customer_name ?: ($sale->social_handle ? '@'.$sale->social_handle : 'Cliente General');
+                $text = $sale->status === 'live_draft' ? "Nueva bolsa para $identifier" : "Venta completada: $identifier (Q {$sale->total})";
+                return ['id' => $sale->id, 'text' => $text, 'time' => $time, 'icon' => $icon, 'color' => $color];
+            });
+
         return Inertia::render('POSDashboard', [
-            'products' => Product::with(['category', 'variants'])->get(),
-            'categories' => Category::all(),
-            'suppliers' => Supplier::all(),
-            'deliveries' => \App\Models\Sale::with(['details.productVariant.product'])
-                ->where('sale_type', 'delivery')
-                ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
-                ->orderBy('created_at', 'desc')
-                ->get(),
+            'activeTab' => 'dashboard',
+            'products' => $products,
+            'categories' => $categories,
+            'suppliers' => $suppliers,
+            'customers' => $customers,
+            'deliveries' => $deliveries,
+            'analytics' => [
+                'salesToday' => $salesToday,
+                'weeklyPerformance' => $weeklyPerformance,
+                'recentActivity' => $recentActivity
+            ],
             'settings' => \App\Models\Setting::all()->pluck('value', 'key'),
             'users' => \App\Models\User::all(),
             'activeSession' => \App\Models\LiveSession::where('status', 'active')->first(),
@@ -98,7 +142,7 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         $product->delete();
-        return redirect()->back()->with('success', 'Producto eliminado correctamente.');
+        return redirect()->route('products.index')->with('success', 'Producto eliminado correctamente.');
     }
 
     public function countSheet(Request $request)

@@ -20,7 +20,9 @@ class POSController extends Controller
         $products = \App\Models\Product::with(['category', 'variants'])->get();
         $categories = \App\Models\Category::all();
         $suppliers = \App\Models\Supplier::all();
-        $customers = \App\Models\Customer::withCount('sales')->get();
+        $customers = \App\Models\Customer::withCount('sales')
+            ->orderBy('full_name', 'asc')
+            ->get();
         $deliveries = Sale::with(['details.productVariant.product'])
             ->whereIn('sale_type', ['delivery', 'manual_delivery'])
             ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
@@ -84,7 +86,10 @@ class POSController extends Controller
                 'salesToday' => $salesToday,
                 'weeklyPerformance' => $weeklyPerformance,
                 'recentActivity' => $recentActivity
-            ]
+            ],
+            'settings' => \App\Models\Setting::all()->pluck('value', 'key'),
+            'users' => \App\Models\User::all(),
+            'activeSession' => \App\Models\LiveSession::where('status', 'active')->first(),
         ]);
     }
 

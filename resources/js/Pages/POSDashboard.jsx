@@ -31,6 +31,7 @@ import {
   PlusCircle,
   UserPlus,
   XCircle,
+  AlertCircle,
   BookOpen,
   Bike,
   Boxes,
@@ -51,8 +52,8 @@ import Swal from 'sweetalert2';
 import AccountingReports from './Reports/AccountingReports';
 import SettingsIndex from './Settings/Index';
 
-export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [], activeSession = null }) {
-  const [activeTab, setActiveTab] = useState('dashboard');
+export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [], activeSession = null, activeTab: initialTab = 'dashboard' }) {
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentSession, setCurrentSession] = useState(activeSession);
   const [sessionTimer, setSessionTimer] = useState('00:00:00');
@@ -415,7 +416,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
         <div className="flex-1 overflow-y-auto p-8">
           {activeTab === 'dashboard' && <Dsh_DashboardView products={products} analytics={analytics} />}
           {activeTab === 'live' && <LiveView auth={auth} products={products} currentSession={currentSession} sessionTimer={sessionTimer} onEndLive={handleEndLive} handleStartLive={handleStartLive} />}
-          {activeTab === 'pos' && <POSView auth={auth} products={products} initialAction={posInitialAction} setInitialAction={setPosInitialAction} />}
+          {activeTab === 'pos' && <POSView auth={auth} products={products} customers={customers} initialAction={posInitialAction} setInitialAction={setPosInitialAction} />}
           {activeTab === 'inventario' && <InventoryView auth={auth} products={products} categories={categories} suppliers={suppliers} />}
           {activeTab === 'pedidos' && <OrdersView auth={auth} deliveries={deliveries} setActiveTab={setActiveTab} setPosInitialAction={setPosInitialAction} />}
           {activeTab === 'clientes' && <CustomersView auth={auth} customers={customers} />}
@@ -2272,7 +2273,7 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
 }
 
 // 5. NUEVO: MÓDULO DE VENTA MANUAL / POST-LIVE
-function POSView({ auth, products, initialAction, setInitialAction }) {
+function POSView({ auth, products, customers = [], initialAction, setInitialAction }) {
   const [cart, setCart] = useState([]);
   const [customerName, setCustomerName] = useState('');
   const [dmText, setDmText] = useState('');
@@ -2296,45 +2297,76 @@ function POSView({ auth, products, initialAction, setInitialAction }) {
   });
   const [isSavingQuickCustomer, setIsSavingQuickCustomer] = useState(false);
 
+  // Verificación de duplicados en tiempo real
+  const [duplicateWarning, setDuplicateWarning] = useState(null);
+
+  useEffect(() => {
+    if (isQuickCustomerModalOpen && !isSavingQuickCustomer) {
+      const name = quickCustomerData.full_name?.trim() || '';
+      const phone = quickCustomerData.phone?.trim() || '';
+
+      if (name.length < 3 && phone.length < 8) {
+        setDuplicateWarning(null);
+        return;
+      }
+
+      const match = (customers || []).find(c => 
+        (name.length >= 3 && c.full_name && c.full_name.toLowerCase() === name.toLowerCase()) ||
+        (phone.length >= 8 && c.phone && c.phone === phone)
+      );
+
+      if (match) {
+        setDuplicateWarning(`¡Atención! Ya existe un cliente con este nombre o teléfono (ID: ${match.id} - ${match.full_name})`);
+      } else {
+        setDuplicateWarning(null);
+      }
+    } else {
+      setDuplicateWarning(null);
+    }
+  }, [quickCustomerData.full_name, quickCustomerData.phone, isQuickCustomerModalOpen, isSavingQuickCustomer, customers]);
+
   // Función para guardar cliente rápido
-  const handleQuickCustomerSubmit = async (e) => {
+  const handleQuickCustomerSubmit = (e) => {
     e.preventDefault();
     setIsSavingQuickCustomer(true);
-    try {
-      const response = await window.axios.post(route('customers.store'), quickCustomerData);
-      if (response.data.success) {
-        const newCustomer = response.data.customer;
-        // Seleccionamos al nuevo cliente automáticamente
-        setSelectedCustomer(newCustomer);
-        setCustomerName(newCustomer.full_name);
-        
-        // Cerramos modal y reseteamos
-        setIsQuickCustomerModalOpen(false);
-        setQuickCustomerData({ full_name: '', social_handle: '', phone: '', default_address: '' });
-        
-        // Notificación Toast elegante
+
+    router.post(route('customers.store'), quickCustomerData, {
+      preserveScroll: true,
+      onSuccess: (page) => {
+        const newCust = page.props.flash?.newCustomer;
+        const warning = page.props.flash?.warning;
+
+        if (newCust) {
+          setSelectedCustomer(newCust);
+          setCustomerName(newCust.full_name);
+          
+          setIsQuickCustomerModalOpen(false);
+          setQuickCustomerData({ full_name: '', social_handle: '', phone: '', default_address: '' });
+          setDuplicateWarning(null);
+
+          Swal.fire({
+            icon: warning ? 'info' : 'success',
+            title: warning ? warning : `¡Cliente guardado y seleccionado: ${newCust.full_name}!`,
+            text: warning ? `Se ha seleccionado el cliente existente: ${newCust.full_name}` : '',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 4000,
+            timerProgressBar: true
+          });
+        }
+      },
+      onError: (errors) => {
+        console.error("Error al crear cliente rápido:", errors);
         Swal.fire({
-          icon: 'success',
-          title: `¡Cliente guardado y seleccionado: ${newCustomer.full_name}!`,
-          toast: true,
-          position: 'top-end',
-          showConfirmButton: false,
-          timer: 3000,
-          timerProgressBar: true
+          icon: 'error',
+          title: 'Error',
+          text: 'Error al guardar el cliente. Verifique los datos.',
+          confirmButtonColor: '#4f46e5'
         });
-      }
-    } catch (error) {
-      console.error("Error al crear cliente rápido:", error);
-      const errorMsg = error.response?.data?.message || 'Error al guardar el cliente. Verifique los datos.';
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: errorMsg,
-        confirmButtonColor: '#4f46e5'
-      });
-    } finally {
-      setIsSavingQuickCustomer(false);
-    }
+      },
+      onFinish: () => setIsSavingQuickCustomer(false)
+    });
   };
 
   React.useEffect(() => {
@@ -3240,6 +3272,12 @@ ${itemsText}
               <button onClick={() => setIsQuickCustomerModalOpen(false)} className="text-indigo-200 hover:text-white"><Plus className="w-5 h-5 rotate-45" /></button>
             </div>
             <form onSubmit={handleQuickCustomerSubmit} className="p-6 space-y-4">
+              {duplicateWarning && (
+                <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded-lg text-[11px] font-bold flex items-center animate-pulse">
+                  <AlertCircle className="w-3.5 h-3.5 mr-2 shrink-0" />
+                  {duplicateWarning}
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre Completo</label>
                 <input 
@@ -3316,13 +3354,13 @@ function CustomersView({ auth, customers }) {
     default_address: '',
     notes: ''
   });
-  const { data, setData, post, put, processing, reset } = customerForm;
-  const destroy = customerForm.delete;
+  const { data, setData, post, put, delete: destroy, processing, reset } = customerForm;
 
   const filteredCustomers = customers.filter(c => 
     c.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
     (c.social_handle && c.social_handle.toLowerCase().includes(searchQuery.toLowerCase())) ||
-    (c.phone && c.phone.includes(searchQuery))
+    (c.phone && c.phone.includes(searchQuery)) ||
+    (c.email && c.email.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const openAddModal = () => { setEditingCustomer(null); reset(); setIsModalOpen(true); };
@@ -3350,17 +3388,50 @@ function CustomersView({ auth, customers }) {
   };
 
   const handleDelete = (id) => {
-    if (confirm('¿Estás seguro de eliminar este cliente?')) destroy(route('customers.destroy', id));
+    Swal.fire({
+      title: '¿Estás seguro?',
+      text: "Esta acción no se puede deshacer.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        destroy(route('customers.destroy', id), {
+          onSuccess: () => {
+            Swal.fire({
+              title: 'Eliminado',
+              text: 'El cliente ha sido eliminado correctamente.',
+              icon: 'success',
+              timer: 1500,
+              showConfirmButton: false
+            });
+          },
+          onError: (errors) => {
+            Swal.fire({
+              title: 'Error',
+              text: 'No se pudo eliminar el cliente. Es posible que tenga ventas asociadas.',
+              icon: 'error'
+            });
+          }
+        });
+      }
+    });
   };
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-slate-200 h-full flex flex-col">
       <div className="p-6 border-b border-slate-200 flex flex-wrap gap-4 justify-between items-center bg-slate-50 rounded-t-xl">
-        <div className="flex space-x-3">
+        <div className="flex items-center space-x-4">
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input type="text" placeholder="Buscar cliente..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:border-indigo-500 outline-none w-64 shadow-sm transition-all" />
           </div>
+          <span className="text-xs font-bold text-slate-400 bg-white px-2 py-1 rounded-md border border-slate-200">
+            Total en DB: {customers.length}
+          </span>
         </div>
         <button onClick={openAddModal} className="flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
           <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
@@ -3393,8 +3464,8 @@ function CustomersView({ auth, customers }) {
                   </div>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-600">
-                  <p>{customer.phone || 'S/N'}</p>
-                  <p className="text-xs text-slate-400">{customer.email || ''}</p>
+                  <p>{customer.phone || '-'}</p>
+                  <p className="text-xs text-slate-400">{customer.email || 'N/A'}</p>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-500 max-w-xs truncate">
                   {customer.default_address || 'S/D'}
@@ -3561,8 +3632,7 @@ function SuppliersView({ auth, suppliers }) {
     address: '',
     contact_info: ''
   });
-  const { data, setData, post, put, processing, reset } = supplierForm;
-  const destroy = supplierForm.delete;
+  const { data, setData, post, put, delete: destroy, processing, reset } = supplierForm;
 
   const filteredSuppliers = suppliers.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -3594,7 +3664,37 @@ function SuppliersView({ auth, suppliers }) {
   };
 
   const handleDelete = (id) => {
-    if (confirm('¿Estás seguro de eliminar este proveedor?')) destroy(route('suppliers.destroy', id));
+    Swal.fire({
+      title: '¿Eliminar Proveedor?',
+      text: "Se borrará el registro de forma permanente.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        destroy(route('suppliers.destroy', id), {
+          onSuccess: () => {
+            Swal.fire({
+              title: 'Eliminado',
+              text: 'Proveedor eliminado correctamente.',
+              icon: 'success',
+              timer: 1500,
+              showConfirmButton: false
+            });
+          },
+          onError: (errors) => {
+            Swal.fire({
+              title: 'Error',
+              text: 'No se pudo eliminar el proveedor.',
+              icon: 'error'
+            });
+          }
+        });
+      }
+    });
   };
 
   return (
