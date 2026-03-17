@@ -188,13 +188,33 @@ class LogisticsController extends Controller
     /**
      * Obtiene el historial de artículos liberados para una bolsa específica.
      */
-    public function getCancelledItemsForBag(Sale $sale)
+    /**
+     * Revierta un pedido de logística de vuelta al Modo Live (live_draft).
+     */
+    public function revertToLive(Sale $sale)
     {
-        $items = CancelledLiveItem::with('productVariant.product')
-            ->where('sale_id', $sale->id)
-            ->orderBy('cancelled_at', 'desc')
-            ->get();
-            
-        return response()->json($items);
+        try {
+            return DB::transaction(function () use ($sale) {
+                // Solo permitir si está en estados iniciales de logística
+                if (!in_array($sale->shipping_status, ['pending_confirmation', 'packing'])) {
+                    return response()->json(['error' => 'No se puede revertir un pedido que ya está en ruta o entregado.'], 422);
+                }
+
+                $sale->update([
+                    'status' => 'live_draft',
+                    'shipping_status' => 'pending_confirmation', // Se resetea para que si vuelve a logística empiece de cero
+                    'delivered_at' => null,
+                    'delivery_date' => null,
+                    'delivery_time' => null,
+                ]);
+
+                return response()->json([
+                    'message' => 'Pedido regresado a Modo Live correctamente.',
+                    'status' => 'success'
+                ]);
+            });
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'Error al revertir el pedido: ' . $e->getMessage()], 500);
+        }
     }
 }

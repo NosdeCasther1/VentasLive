@@ -27,7 +27,9 @@ class Sale extends Model
         'change',
         'notes',
         'cash_register_id',
-        'cancelled_at'
+        'cancelled_at',
+        'delivery_date',
+        'delivery_time'
     ];
 
     public function cashRegister()

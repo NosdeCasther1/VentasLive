@@ -45,7 +45,8 @@ import {
   MinusCircle,
   LogOut,
   UserCircle,
-  RefreshCw
+  RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import { Head, router, Link, useForm } from '@inertiajs/react';
 import axios from 'axios';
@@ -619,6 +620,10 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
 
   // Estados para el formulario
   const [username, setUsername] = useState('');
+  const [customerSearch, setCustomerSearch] = useState('');
+  const [selectedClientId, setSelectedClientId] = useState(null);
+  const [customerResults, setCustomerResults] = useState([]);
+  const [showCustomerResults, setShowCustomerResults] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
@@ -638,7 +643,9 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
     shipping_address: '',
     shipping_cost: '0',
     payment_status: 'Pago Contra Entrega',
-    discount: '0'
+    discount: '0',
+    delivery_date: '',
+    delivery_time: 'Mañana (9 AM - 12 PM)'
   });
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [cancellingIds, setCancellingIds] = useState([]);
@@ -671,12 +678,14 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
   const handleOpenCheckout = (bag) => {
     setCheckoutBag(bag);
     setCheckoutData({
-      customer_name: '',
-      customer_phone: '',
-      shipping_address: '',
+      customer_name: bag.customer_name || '',
+      customer_phone: bag.customer?.phone || bag.customer_phone || '',
+      shipping_address: bag.customer?.default_address || bag.shipping_address || '',
       shipping_cost: '0',
       payment_status: 'Pago Contra Entrega',
-      discount: '0'
+      discount: '0',
+      delivery_date: new Date().toISOString().split('T')[0],
+      delivery_time: 'Tarde (2 PM - 5 PM)'
     });
     setIsCheckoutModalOpen(true);
   };
@@ -770,6 +779,20 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
     }
   };
 
+  const handleSelectBagForAssignment = (bag) => {
+    setUsername(bag.social_handle);
+    setSelectedClientId(bag.customer_id);
+    Swal.fire({
+      icon: 'success',
+      title: 'Contexto de Asignación',
+      text: `Ahora agregando compras a @${bag.social_handle}`,
+      toast: true,
+      position: 'top-end',
+      timer: 2500,
+      showConfirmButton: false
+    });
+  };
+
   const handleAddToBag = async (e) => {
     if (e) e.preventDefault();
     if(!username || !selectedVariant) return;
@@ -778,6 +801,7 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
     try {
       const response = await axios.post(route('live.addItem'), {
         social_handle: username,
+        client_id: selectedClientId,
         variant_id: selectedVariant.id,
         quantity: quantity
       });
@@ -825,60 +849,82 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
         if (response.status === 200) {
           const data = response.data;
           
-          // Actualizar localmente la bolsa activa
-          const updatedBag = {
-            ...viewingBag,
-            details: viewingBag.details.filter(d => d.id !== item.id),
-            total: data.new_total
-          };
+          // Actualizar localmente la bolsa activa si existe
+          if (viewingBag) {
+            const updatedBag = {
+              ...viewingBag,
+              details: viewingBag.details.filter(d => d.id !== item.id),
+              total: data.new_total
+            };
 
-          if (updatedBag.details.length === 0) {
-            setBags(bags.filter(b => b.id !== updatedBag.id));
-            // No cerramos el modal, para que se vea el historial
-            setViewingBag(updatedBag);
-          } else {
-            setBags(bags.map(b => b.id === updatedBag.id ? updatedBag : b));
-            setViewingBag(updatedBag);
+            if (updatedBag.details.length === 0) {
+              setBags(bags.filter(b => b.id !== updatedBag.id));
+              setViewingBag(updatedBag);
+            } else {
+              setBags(bags.map(b => b.id === updatedBag.id ? updatedBag : b));
+              setViewingBag(updatedBag);
+            }
+            
+            // Refrescar historial
+            loadCancelledItemsHistory(viewingBag.id);
           }
 
-          // Refrescar historial
-          loadCancelledItemsHistory(viewingBag.id);
+          // Forzar recarga de Inertia para sincronizar todas las props
+          router.reload({ only: ['bags'], preserveScroll: true });
 
           Swal.fire({
             title: '¡Artículo Liberado!',
-            text: 'Se ha actualizado el inventario y el historial.',
+            text: 'Se ha actualizado el inventario.',
             icon: 'success',
             toast: true,
             position: 'top-end',
             showConfirmButton: false,
-            timer: 3000,
-            timerProgressBar: true
+            timer: 3000
           });
         }
       } catch (error) {
         console.error("Error removing item:", error);
-        Swal.fire('Error', error.response?.data?.error || "Error al eliminar el artículo", 'error');
+        Swal.fire('Error', error.response?.data?.error || "Error al liberar el artículo", 'error');
       }
     }
   };
 
   const handleCancelBag = (saleId) => {
-    if(!confirm("¿Deseas CANCELAR esta bolsa por completo? Todos los artículos volverán al inventario.")) return;
-    
-    setCancellingIds(prev => [...prev, saleId]);
-    
-    router.post(route('live.cancelBag', saleId), {}, {
-      preserveScroll: true,
-      onSuccess: () => {
-        setViewingBag(null);
-        // El desvanecimiento se maneja por el ID en cancellingIds
-        setTimeout(() => {
-          setCancellingIds(prev => prev.filter(id => id !== saleId));
-        }, 500);
-      },
-      onError: () => {
-        setCancellingIds(prev => prev.filter(id => id !== saleId));
-        alert("Error al cancelar la bolsa");
+    Swal.fire({
+      title: '¿Anular Bolsa?',
+      text: "Todos los artículos volverán al inventario y el usuario perderá su apartado.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, anular todo',
+      cancelButtonText: 'No, mantener'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setCancellingIds(prev => [...prev, saleId]);
+        
+        router.post(route('live.cancelBag', saleId), {}, {
+          preserveScroll: true,
+          onSuccess: () => {
+            setViewingBag(null);
+            Swal.fire({
+              icon: 'success',
+              title: 'Bolsa Anulada',
+              toast: true,
+              position: 'top-end',
+              showConfirmButton: false,
+              timer: 3000
+            });
+            setTimeout(() => {
+              setCancellingIds(prev => prev.filter(id => id !== saleId));
+            }, 500);
+          },
+          onError: (err) => {
+            console.error("Error cancelling bag:", err);
+            setCancellingIds(prev => prev.filter(id => id !== saleId));
+            Swal.fire('Error', 'No se pudo anular la bolsa', 'error');
+          }
+        });
       }
     });
   };
@@ -967,14 +1013,22 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
           </h3>
           <div className="space-y-4 flex-1 relative">
             <div>
-              <label className="block text-sm font-medium text-slate-600 mb-1">Usuario (@)</label>
+              <label className="block text-sm font-medium text-slate-600 mb-1">Usuario / ID Manual</label>
               <input 
                 type="text" 
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  setUsername(e.target.value);
+                  setSelectedClientId(null); 
+                }}
                 placeholder="Ej. sofia_lopez" 
                 className="w-full border border-slate-300 rounded-lg p-3 bg-slate-50 focus:bg-white focus:border-indigo-500 outline-none transition-all" 
               />
+              {selectedClientId && (
+                <p className="text-[10px] text-indigo-600 font-bold mt-1 animate-pulse flex items-center">
+                  <UserCircle className="w-3 h-3 mr-1" /> Cliente Vinculado (ID: {selectedClientId})
+                </p>
+              )}
             </div>
             <div className="relative">
               <label className="block text-sm font-medium text-slate-600 mb-1">Producto / Variante</label>
@@ -1048,23 +1102,59 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
 
         {/* Panel Consolidación (Derecha) */}
         <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="font-bold text-slate-700 flex items-center">
-              <Package className="w-5 h-5 mr-2 text-indigo-500" /> Bolsas del Live Actual
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="font-bold text-slate-700 flex items-center text-lg">
+              <ShoppingBag className="w-6 h-6 mr-3 text-indigo-600" /> Bolsas del Live Actual
+              <span className="ml-3 bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full text-xs font-black">
+                {bags.length}
+              </span>
             </h3>
-            <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-sm font-bold shadow-sm">
-              {isLoadingBags ? 'Cargando...' : `${bags.length} Activas`}
-            </span>
+            <span className="text-xs text-slate-400 font-medium">Busca clientes para asignarles compras</span>
           </div>
           
           <div className="flex-1 overflow-y-auto pr-2 space-y-3 custom-scrollbar">
+            
+            {/* Buscador Integrado como Fila de la Tabla */}
+            <div className="sticky top-0 z-10 bg-white pb-2">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                  <Search className="h-5 w-5 text-indigo-400 group-focus-within:text-indigo-600 transition-colors" />
+                </div>
+                <input 
+                  type="text" 
+                  value={customerSearch}
+                  onChange={(e) => setCustomerSearch(e.target.value)}
+                  placeholder="🔍 Filtrar bolsas activas por cliente..." 
+                  className="block w-full pl-11 pr-4 py-4 bg-slate-50 border-2 border-slate-100 rounded-2xl text-slate-900 font-medium placeholder:text-slate-400 focus:bg-white focus:border-indigo-500 focus:ring-4 focus:ring-indigo-50 transition-all outline-none shadow-sm" 
+                />
+                
+                {/* Eliminado el dropdown flotante que tapaba el contenido */}
+              </div>
+            </div>
+
+            {/* Resultado de búsqueda / Listado */}
+            {!isLoadingBags && bags.length > 0 && bags.filter(b => !customerSearch || 
+                b.social_handle?.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                b.customer_name?.toLowerCase().includes(customerSearch.toLowerCase())
+            ).length === 0 && (
+              <div className="py-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                <Search className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                <p className="text-slate-500 font-medium">No se encontró ninguna bolsa para "{customerSearch}"</p>
+                <button onClick={() => setCustomerSearch('')} className="text-indigo-600 font-bold text-sm mt-2 hover:underline">Limpiar búsqueda</button>
+              </div>
+            )}
             {!isLoadingBags && bags.length === 0 && (
               <div className="h-full flex flex-col items-center justify-center text-slate-300 py-12">
                 <ShoppingBag className="w-16 h-16 mb-4 opacity-20" />
                 <p className="font-medium text-slate-400">No hay bolsas activas aún</p>
               </div>
             )}
-            {!isLoadingBags && bags.map(bag => (
+            {!isLoadingBags && bags
+              .filter(b => !customerSearch || 
+                b.social_handle?.toLowerCase().includes(customerSearch.toLowerCase()) || 
+                b.customer_name?.toLowerCase().includes(customerSearch.toLowerCase())
+              )
+              .map(bag => (
               <div key={bag.id} className={`group border border-slate-200 rounded-xl p-4 flex items-center justify-between transition-all bg-slate-50/50 hover:bg-white hover:border-indigo-400 hover:shadow-md ${cancellingIds.includes(bag.id) ? 'opacity-0 scale-95 pointer-events-none' : ''}`}>
                 <div className="flex items-center space-x-4">
                   <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-full text-white shadow-indigo-200 shadow-lg group-hover:scale-110 transition-transform">
@@ -1087,8 +1177,14 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
                   </div>
                   <div className="flex flex-col space-y-2">
                     <button 
+                      onClick={() => handleSelectBagForAssignment(bag)}
+                      className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center justify-center shadow-lg shadow-indigo-100 transition-all hover:-translate-y-0.5"
+                    >
+                      <PlusCircle className="w-4 h-4 mr-2" /> Asignar
+                    </button>
+                    <button 
                       onClick={() => handleOpenCheckout(bag)}
-                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center justify-center shadow-lg shadow-emerald-200 transition-all hover:-translate-y-0.5"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-bold flex items-center justify-center shadow-lg shadow-emerald-100 transition-all hover:-translate-y-0.5"
                     >
                       <Calendar className="w-4 h-4 mr-2" /> Agendar
                     </button>
@@ -1297,6 +1393,17 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
                   <option value="Pago Contra Entrega">Pago Contra Entrega</option>
                   <option value="Pagado">Ya Pagado (Transferencia)</option>
                 </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-indigo-600 uppercase mb-1">📅 Fecha de Entrega</label>
+                  <input required type="date" value={checkoutData.delivery_date} onChange={e => setCheckoutData({...checkoutData, delivery_date: e.target.value})} className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none font-bold" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-indigo-600 uppercase mb-1">🕒 Horario Recepción</label>
+                  <input required type="text" value={checkoutData.delivery_time} onChange={e => setCheckoutData({...checkoutData, delivery_time: e.target.value})} placeholder="Ej. 2 PM - 5 PM" className="w-full bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none font-bold" />
+                </div>
               </div>
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
@@ -1903,6 +2010,44 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
     });
   };
 
+  const handleRevertOrder = async (orderId) => {
+    const result = await Swal.fire({
+      title: '¿Regresar a Modo Live?',
+      text: "El pedido volverá como bolsa borrador al panel de Live para que puedas editarlo.",
+      icon: 'info',
+      showCancelButton: true,
+      confirmButtonColor: '#4f46e5',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, regresar a Live',
+      cancelButtonText: 'Cancelar'
+    });
+
+    if (result.isConfirmed) {
+      setIsUpdating(true);
+      try {
+        const response = await axios.post(route('logistics.revertToLive', orderId));
+        if (response.status === 200) {
+          Swal.fire({
+            icon: 'success',
+            title: '¡Pedido Revertido!',
+            text: 'Ahora lo encontrarás en el panel de Live.',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000
+          });
+          // Recargar para remover de logística
+          router.reload({ only: ['deliveries'] });
+        }
+      } catch (error) {
+        console.error("Error reverting order:", error);
+        Swal.fire('Error', error.response?.data?.error || "No se pudo revertir el pedido", 'error');
+      } finally {
+        setIsUpdating(false);
+      }
+    }
+  };
+
   // Order Details Modal
   const [selectedOrder, setSelectedOrder] = useState(null);
 
@@ -2077,8 +2222,19 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
                         <span className="text-xs text-slate-400 flex items-center"><Clock className="w-3 h-3 mr-1" /> {new Date(order.created_at).toLocaleDateString()}</span>
                       </div>
                       <p className="font-bold text-slate-800">{customerName}</p>
-                      <p className="text-sm text-slate-500 mb-3 truncate">{order.shipping_address || 'Sin dirección registrada'}</p>
+                      <p className="text-sm text-slate-500 mb-2 truncate">{order.shipping_address || 'Sin dirección registrada'}</p>
                       
+                      {order.delivery_date && (
+                        <div className="flex flex-col space-y-1 mb-3">
+                          <div className="flex items-center text-[10px] font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded w-fit">
+                            <Calendar className="w-3 h-3 mr-1" /> {order.delivery_date}
+                          </div>
+                          <div className="flex items-center text-[10px] font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded w-fit">
+                            <Clock className="w-3 h-3 mr-1" /> {order.delivery_time}
+                          </div>
+                        </div>
+                      )}
+
                       <div className="flex justify-between items-center pt-3 border-t border-slate-100">
                         <span className="text-sm font-bold text-slate-700">Q {total.toFixed(2)}</span>
                         <span className="text-[10px] font-medium text-slate-500 bg-slate-100 px-2 py-1 rounded">{order.payment_status === 'paid' ? 'Pagado' : 'Pago c/Entrega'}</span>
@@ -2096,6 +2252,17 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
                              <Sparkles className="w-3 h-3 mr-1.5" /> 
                           )}
                           Pedir Dirección IA
+                        </button>
+                      )}
+
+                      {/* Botón Reversión (Solo en primera columna) */}
+                      {col.id === 'pending_confirmation' && (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleRevertOrder(order.id); }}
+                          className="mt-3 w-full opacity-0 group-hover:opacity-100 transition-opacity bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 py-1.5 rounded text-xs font-bold flex items-center justify-center"
+                        >
+                          <RotateCcw className="w-3 h-3 mr-1.5" />
+                          Regresar a Live (Editar)
                         </button>
                       )}
                     </div>

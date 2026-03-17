@@ -19,24 +19,41 @@ class LiveController extends Controller
     public function addItemToBag(Request $request)
     {
         $request->validate([
-            'social_handle' => 'required|string',
+            'social_handle' => 'nullable|string',
+            'client_id' => 'nullable|exists:customers,id',
             'variant_id' => 'required|exists:product_variants,id',
             'quantity' => 'required|integer|min:1',
         ]);
 
+        if (!$request->social_handle && !$request->client_id) {
+            return response()->json(['error' => 'Debe proporcionar un usuario o seleccionar un cliente'], 422);
+        }
+
         return DB::transaction(function () use ($request) {
-            // 1. Get or create the live_draft sale for this social_handle
-            $sale = Sale::where('social_handle', $request->social_handle)
-                ->where('status', 'live_draft')
-                ->first();
+            // 1. Get or create the live_draft sale
+            if ($request->client_id) {
+                $sale = Sale::where('customer_id', $request->client_id)
+                    ->where('status', 'live_draft')
+                    ->first();
+            } else {
+                $sale = Sale::where('social_handle', $request->social_handle)
+                    ->where('status', 'live_draft')
+                    ->first();
+            }
             
             $isNewBag = !$sale;
 
             if ($isNewBag) {
+                $customer = null;
+                if ($request->client_id) {
+                    $customer = Customer::find($request->client_id);
+                }
+
                 $sale = Sale::create([
-                    'social_handle' => $request->social_handle,
+                    'social_handle' => $request->social_handle ?: ($customer ? $customer->social_handle : null),
+                    'customer_id' => $request->client_id,
                     'status' => 'live_draft',
-                    'customer_name' => $request->social_handle,
+                    'customer_name' => $customer ? $customer->full_name : $request->social_handle,
                     'sale_type' => 'delivery',
                     'total' => 0,
                     'shipping_status' => 'pending_confirmation',
@@ -155,6 +172,8 @@ class LiveController extends Controller
             'shipping_cost' => 'required|numeric|min:0',
             'payment_status' => 'required|string',
             'discount' => 'nullable|numeric|min:0',
+            'delivery_date' => 'required|date',
+            'delivery_time' => 'required|string',
         ]);
 
         $user = auth()->user();
@@ -203,6 +222,8 @@ class LiveController extends Controller
                     'shipping_status' => 'pending_confirmation', // Estado inicial para que aparezca en el Kanban de Logística
                     'payment_status' => $request->payment_status === 'Pago Contra Entrega' ? 'pending_cod' : 'paid',
                     'payment_method' => $request->payment_status === 'Pagado' ? 'Transferencia/Previo' : 'Contra Entrega',
+                    'delivery_date' => $request->delivery_date,
+                    'delivery_time' => $request->delivery_time,
                 ]);
             });
 

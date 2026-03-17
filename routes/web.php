@@ -60,6 +60,7 @@ Route::middleware(['auth'])->group(function () {
         Route::get('api/live/cancelled-items/{sale}', [\App\Http\Controllers\LogisticsController::class, 'getCancelledItemsForBag'])->name('live.cancelledItems');
         Route::post('api/live/cancel-bag/{sale}', [\App\Http\Controllers\LiveController::class, 'cancelBag'])->name('live.cancelBag');
         Route::post('api/live/checkout/{sale}', [\App\Http\Controllers\LiveController::class, 'checkout'])->name('live.checkout');
+        Route::post('api/live/revert/{sale}', [\App\Http\Controllers\LogisticsController::class, 'revertToLive'])->name('logistics.revertToLive');
         Route::post('/live/process-ai', [\App\Http\Controllers\LiveController::class, 'processAI'])->name('live.processAI');
         Route::post('api/live/sessions/start', [\App\Http\Controllers\LiveController::class, 'startSession'])->name('live.sessions.start');
         Route::post('api/live/sessions/{session}/end', [\App\Http\Controllers\LiveController::class, 'endSession'])->name('live.sessions.end');
