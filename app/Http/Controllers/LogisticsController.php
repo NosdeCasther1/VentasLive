@@ -97,11 +97,17 @@ class LogisticsController extends Controller
             return DB::transaction(function () use ($sale) {
                 // 1. Verificar que el pedido no esté ya entregado o cancelado
                 if ($sale->shipping_status === 'delivered') {
-                    return response()->json(['error' => 'No se puede cancelar un pedido que ya ha sido entregado.'], 422);
+                    $errorMsg = 'No se puede cancelar un pedido que ya ha sido entregado.';
+                    return request()->wantsJson() 
+                        ? response()->json(['error' => $errorMsg], 422) 
+                        : back()->withErrors(['error' => $errorMsg]);
                 }
                 
                 if ($sale->shipping_status === 'cancelled') {
-                    return response()->json(['error' => 'El pedido ya se encuentra cancelado.'], 422);
+                    $errorMsg = 'El pedido ya se encuentra cancelado.';
+                    return request()->wantsJson() 
+                        ? response()->json(['error' => $errorMsg], 422) 
+                        : back()->withErrors(['error' => $errorMsg]);
                 }
 
                 // 2. Cambiar estado a cancelado

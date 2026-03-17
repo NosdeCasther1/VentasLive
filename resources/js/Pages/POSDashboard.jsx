@@ -44,15 +44,16 @@ import {
   History,
   MinusCircle,
   LogOut,
-  UserCircle
+  UserCircle,
+  RefreshCw
 } from 'lucide-react';
-import { Head, router, Link } from '@inertiajs/react';
+import { Head, router, Link, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import AccountingReports from './Reports/AccountingReports';
 import SettingsIndex from './Settings/Index';
 
-export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [], activeSession = null, activeTab: initialTab = 'dashboard' }) {
+export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [], activeSession = null, bags = [], activeTab: initialTab = 'dashboard' }) {
   const [activeTab, setActiveTab] = useState(initialTab);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [currentSession, setCurrentSession] = useState(activeSession);
@@ -113,6 +114,24 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
       if (interval) clearInterval(interval);
     };
   }, [currentSession]);
+
+  // Polling automático para sincronizar estados entre múltiples ventanas o sesiones (Solución F5)
+  useEffect(() => {
+    let pollInterval;
+    if (activeTab === 'pedidos' || activeTab === 'live') {
+      pollInterval = setInterval(() => {
+        router.reload({
+          only: ['deliveries', 'bags'],
+          preserveScroll: true,
+          preserveState: true,
+        });
+      }, 5000); // 5 segundos
+    }
+    
+    return () => {
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [activeTab]);
 
   const handleStartLive = async () => {
     const { value: sessionName } = await Swal.fire({
@@ -415,10 +434,10 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
         {/* SCROLLABLE CONTENT */}
         <div className="flex-1 overflow-y-auto p-8">
           {activeTab === 'dashboard' && <Dsh_DashboardView products={products} analytics={analytics} />}
-          {activeTab === 'live' && <LiveView auth={auth} products={products} currentSession={currentSession} sessionTimer={sessionTimer} onEndLive={handleEndLive} handleStartLive={handleStartLive} />}
+          {activeTab === 'live' && <LiveView auth={auth} products={products} currentSession={currentSession} sessionTimer={sessionTimer} onEndLive={handleEndLive} handleStartLive={handleStartLive} bagsProp={bags} />}
           {activeTab === 'pos' && <POSView auth={auth} products={products} customers={customers} initialAction={posInitialAction} setInitialAction={setPosInitialAction} />}
           {activeTab === 'inventario' && <InventoryView auth={auth} products={products} categories={categories} suppliers={suppliers} />}
-          {activeTab === 'pedidos' && <OrdersView auth={auth} deliveries={deliveries} setActiveTab={setActiveTab} setPosInitialAction={setPosInitialAction} />}
+          {activeTab === 'pedidos' && <OrdersView key={`orders-view-${deliveries.length}`} auth={auth} deliveries={deliveries} setActiveTab={setActiveTab} setPosInitialAction={setPosInitialAction} />}
           {activeTab === 'clientes' && <CustomersView auth={auth} customers={customers} />}
           {activeTab === 'proveedores' && <SuppliersView auth={auth} suppliers={suppliers} />}
           {activeTab === 'reportes' && <ReportsView auth={auth} />}
@@ -589,24 +608,14 @@ function Dsh_StatCard({ title, amount, subtitle, trend, isPositive, icon, color 
 }
 
 // 2. MODO LIVE VIEW (Adaptado del diseño anterior)
-function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, handleStartLive }) {
-  const [bags, setBags] = useState([]);
-  const [isLoadingBags, setIsLoadingBags] = useState(true);
+function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, handleStartLive, bagsProp = [] }) {
+  const [bags, setBags] = useState(bagsProp);
+  const [isLoadingBags, setIsLoadingBags] = useState(false);
 
-  // Load bags from API
+  // Mantener el estado local sincronizado con las props de Inertia
   useEffect(() => {
-    const loadBags = async () => {
-      try {
-        const response = await axios.get(route('live.bags'));
-        setBags(response.data);
-      } catch (error) {
-        console.error("Error loading bags:", error);
-      } finally {
-        setIsLoadingBags(false);
-      }
-    };
-    loadBags();
-  }, []);
+    setBags(bagsProp);
+  }, [bagsProp]);
 
   // Estados para el formulario
   const [username, setUsername] = useState('');
@@ -672,24 +681,38 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
     setIsCheckoutModalOpen(true);
   };
 
-  const handleCheckoutSubmit = async (e) => {
+  const handleCheckoutSubmit = (e) => {
     e.preventDefault();
     setIsProcessingCheckout(true);
     
-    try {
-      const response = await axios.post(route('live.checkout', checkoutBag.id), checkoutData);
-      
-      if (response.status === 200) {
+    router.post(route('live.checkout', checkoutBag.id), checkoutData, {
+      preserveScroll: true,
+      onSuccess: () => {
         setIsCheckoutModalOpen(false);
-        setBags(bags.filter(b => b.id !== checkoutBag.id));
-        alert("¡Venta agendada con éxito! La encontrarás en el panel de Logística.");
+        // La actualización de bags y deliveries ahora se maneja automáticamente por Inertia
+        
+        Swal.fire({
+          icon: 'success',
+          title: '¡Venta Agendada!',
+          text: 'La encontrarás en el panel de Logística.',
+          toast: true,
+          position: 'top-end',
+          showConfirmButton: false,
+          timer: 3000
+        });
+      },
+      onError: (errors) => {
+        console.error("Checkout error:", errors);
+        Swal.fire({
+          title: 'Error',
+          text: errors.error || "Error al procesar el checkout",
+          icon: 'error'
+        });
+      },
+      onFinish: () => {
+        setIsProcessingCheckout(false);
       }
-    } catch (error) {
-      console.error("Checkout error:", error);
-      alert(error.response?.data?.error || "Error al procesar el checkout");
-    } finally {
-      setIsProcessingCheckout(false);
-    }
+    });
   };
 
   // Función para llamar a Gemini API vía Backend
@@ -839,25 +862,25 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
     }
   };
 
-  const handleCancelBag = async (saleId) => {
+  const handleCancelBag = (saleId) => {
     if(!confirm("¿Deseas CANCELAR esta bolsa por completo? Todos los artículos volverán al inventario.")) return;
     
     setCancellingIds(prev => [...prev, saleId]);
     
-    try {
-      const response = await axios.post(route('live.cancelBag', saleId));
-      if (response.status === 200) {
+    router.post(route('live.cancelBag', saleId), {}, {
+      preserveScroll: true,
+      onSuccess: () => {
+        setViewingBag(null);
+        // El desvanecimiento se maneja por el ID en cancellingIds
         setTimeout(() => {
-          setBags(bags.filter(b => b.id !== saleId));
-          setViewingBag(null);
           setCancellingIds(prev => prev.filter(id => id !== saleId));
         }, 500);
+      },
+      onError: () => {
+        setCancellingIds(prev => prev.filter(id => id !== saleId));
+        alert("Error al cancelar la bolsa");
       }
-    } catch (error) {
-      setCancellingIds(prev => prev.filter(id => id !== saleId));
-      console.error("Error cancelling bag:", error);
-      alert(error.response?.data?.error || "Error al cancelar la bolsa");
-    }
+    });
   };
 
   // Filtrado de variantes para el autocomplete
@@ -1988,6 +2011,20 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-xl font-bold text-slate-800">Tablero de Envíos {isUpdating && <Loader2 className="inline-block w-4 h-4 ml-2 animate-spin text-indigo-500" />}</h2>
         <div className="flex space-x-2">
+          <button 
+            onClick={() => {
+              setIsUpdating(true);
+              router.reload({ 
+                only: ['deliveries'], 
+                preserveScroll: true,
+                onFinish: () => setIsUpdating(false) // se apaga el Loader2 existente del H2
+              });
+            }} 
+            className="bg-white border border-slate-300 text-slate-600 px-3 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center shadow-sm"
+            title="Refrescar Pedidos"
+          >
+            <RefreshCw className={`w-4 h-4 text-slate-600 ${isUpdating ? 'animate-spin text-indigo-500' : ''}`} />
+          </button>
           <button onClick={() => window.open(route('logistics.manifest'), '_blank')} className="bg-white border border-slate-300 text-slate-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center">
             <Truck className="w-4 h-4 mr-2" /> Manifiesto Motorista
           </button>

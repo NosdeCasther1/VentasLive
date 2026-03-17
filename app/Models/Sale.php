@@ -14,8 +14,10 @@ class Sale extends Model
         'customer_address',
         'social_handle',
         'total',
+        'discount',
         'payment_method',
         'payment_status',
+        'status',
         'sale_type',
         'shipping_phone',
         'shipping_address',
@@ -24,7 +26,8 @@ class Sale extends Model
         'amount_received',
         'change',
         'notes',
-        'cash_register_id'
+        'cash_register_id',
+        'cancelled_at'
     ];
 
     public function cashRegister()

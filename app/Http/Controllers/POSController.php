@@ -25,8 +25,9 @@ class POSController extends Controller
             ->get();
         $deliveries = Sale::with(['details.productVariant.product'])
             ->whereIn('sale_type', ['delivery', 'manual_delivery'])
+            ->where('status', 'completed') // Excluir bolsas temporales (live_draft)
             ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
-            ->orderBy('created_at', 'desc')
+            ->orderBy('updated_at', 'desc')
             ->get();
 
         // --- DASHBOARD ANALYTICS ---
@@ -90,6 +91,10 @@ class POSController extends Controller
             'settings' => \App\Models\Setting::all()->pluck('value', 'key'),
             'users' => \App\Models\User::all(),
             'activeSession' => \App\Models\LiveSession::where('status', 'active')->first(),
+            'bags' => Sale::with(['details.productVariant.product'])
+                ->where('status', 'live_draft')
+                ->orderBy('updated_at', 'desc')
+                ->get(),
         ]);
     }
 

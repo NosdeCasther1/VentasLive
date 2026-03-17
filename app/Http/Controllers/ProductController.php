@@ -23,8 +23,9 @@ class ProductController extends Controller
             ->get();
         $deliveries = \App\Models\Sale::with(['details.productVariant.product'])
             ->whereIn('sale_type', ['delivery', 'manual_delivery'])
+            ->where('status', 'completed') // No mostrar bolsas en borrador (live_draft)
             ->whereIn('shipping_status', ['pending_confirmation', 'packing', 'in_transit'])
-            ->orderBy('created_at', 'desc')
+            ->orderBy('updated_at', 'desc')
             ->get();
 
         // --- DASHBOARD ANALYTICS ---
@@ -71,6 +72,10 @@ class ProductController extends Controller
             'settings' => \App\Models\Setting::all()->pluck('value', 'key'),
             'users' => \App\Models\User::all(),
             'activeSession' => \App\Models\LiveSession::where('status', 'active')->first(),
+            'bags' => \App\Models\Sale::with(['details.productVariant.product'])
+                ->where('status', 'live_draft')
+                ->orderBy('updated_at', 'desc')
+                ->get(),
         ]);
     }
 

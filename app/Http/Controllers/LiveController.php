@@ -46,6 +46,7 @@ class LiveController extends Controller
                 $count = Sale::where('status', 'live_draft')->count();
                 $admins = User::where('role', 'admin')->get();
                 $notification = new \App\Notifications\PendingLiveBagsNotification($count);
+                /** @var \App\Models\User $admin */
                 foreach ($admins as $admin) {
                     $admin->notify($notification);
                 }
@@ -86,6 +87,7 @@ class LiveController extends Controller
             if ($variant->stock <= 2) {
                 $admins = User::where('role', 'admin')->get();
                 $notification = new LowStockNotification($variant->product->name . " ({$variant->size} {$variant->color})", $variant->stock);
+                /** @var \App\Models\User $admin */
                 foreach ($admins as $admin) {
                     $admin->notify($notification);
                 }
@@ -176,7 +178,7 @@ class LiveController extends Controller
         }
 
         try {
-            return DB::transaction(function () use ($request, $sale, $discount, $subtotal) {
+            DB::transaction(function () use ($request, $sale, $discount, $subtotal) {
                 // 1. Associate or create Customer
                 $customer = Customer::firstOrCreate(
                     ['social_handle' => $sale->social_handle],
@@ -187,7 +189,7 @@ class LiveController extends Controller
                     ]
                 );
 
-                // 2. Update sale to formal status
+                // 2. Update sale to formal status (This "converts" the bag into a formal order)
                 $sale->update([
                     'customer_id' => $customer->id,
                     'customer_name' => $request->customer_name,
@@ -197,24 +199,38 @@ class LiveController extends Controller
                     'shipping_cost' => $request->shipping_cost,
                     'total' => ($subtotal - $discount) + $request->shipping_cost,
                     'discount' => $discount,
-                    'status' => 'completed',
-                    'shipping_status' => 'pending_confirmation',
+                    'status' => 'completed', // Cambiamos de 'live_draft' a 'completed' para que sea una venta formal
+                    'shipping_status' => 'pending_confirmation', // Estado inicial para que aparezca en el Kanban de Logística
                     'payment_status' => $request->payment_status === 'Pago Contra Entrega' ? 'pending_cod' : 'paid',
                     'payment_method' => $request->payment_status === 'Pagado' ? 'Transferencia/Previo' : 'Contra Entrega',
                 ]);
-
-                // Note: Inventory was already subtracted from stock and added to reserved in addItemToBag.
-                // In this system, 'completed' sales in logistics will have their reserved status cleared
-                // when the POSController@store (or similar) is called, or we could do it here if this was the final step.
-                // But for 'live_draft', we keep it reserved until it moves through the packing/shipping flow.
-                
-                return response()->json([
-                    'message' => 'Bolsa agendada correctamente. Movida a Logística.',
-                    'sale' => $sale
-                ]);
             });
+
+            if ($request->header('X-Inertia')) {
+                return back()->with('success', '¡Venta agendada! Enviada a Logística.');
+            }
+            
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'status' => 'success',
+                    'message' => '¡Venta agendada! Enviada a Logística.',
+                    'sale' => $sale->fresh()
+                ]);
+            }
+            
+            return back()->with('success', '¡Venta agendada! Enviada a Logística.');
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Error al procesar el checkout: ' . $e->getMessage()], 500);
+            if ($request->header('X-Inertia')) {
+                return back()->withErrors(['error' => 'Error al procesar el checkout: ' . $e->getMessage()]);
+            }
+            
+            if ($request->wantsJson()) {
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Error al procesar el checkout: ' . $e->getMessage()
+                ], 500);
+            }
+            return back()->withErrors(['error' => 'Error al procesar el checkout: ' . $e->getMessage()]);
         }
     }
 
@@ -300,10 +316,16 @@ class LiveController extends Controller
 
                 $sale->delete(); // Eliminar la bolsa por completo
 
-                return response()->json(['message' => 'Bolsa cancelada e inventario liberado']);
+                if (request()->wantsJson()) {
+                    return response()->json(['message' => 'Bolsa cancelada e inventario liberado']);
+                }
+                return back()->with('success', 'Bolsa cancelada e inventario liberado.');
             });
         } catch (\Exception $e) {
-            return response()->json(['error' => 'Error al cancelar la bolsa: ' . $e->getMessage()], 500);
+            if (request()->wantsJson()) {
+                return response()->json(['error' => 'Error al cancelar la bolsa: ' . $e->getMessage()], 500);
+            }
+            return back()->withErrors(['error' => 'Error al cancelar la bolsa: ' . $e->getMessage()]);
         }
     }
     public function startSession(Request $request)
