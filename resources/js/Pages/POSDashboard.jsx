@@ -46,7 +46,7 @@ import {
   LogOut,
   UserCircle
 } from 'lucide-react';
-import { Head, useForm, router, Link } from '@inertiajs/react';
+import { Head, router, Link } from '@inertiajs/react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import AccountingReports from './Reports/AccountingReports';
@@ -530,9 +530,12 @@ function Dsh_DashboardView({ products = [], analytics = {} }) {
               />
             ))}
           </div>
-          <button className="w-full mt-6 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors">
+          <Link 
+            href="/historial-actividad"
+            className="w-full mt-6 py-2 border border-slate-200 rounded-lg text-sm font-medium text-slate-600 hover:bg-slate-50 transition-colors text-center block"
+          >
             Ver todo el historial
-          </button>
+          </Link>
         </div>
       </div>
     </div>

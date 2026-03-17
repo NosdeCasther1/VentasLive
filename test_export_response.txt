@@ -1,0 +1,11 @@
+Status: 200
+Headers:
+Cache-Control:       no-cache, private
+Content-Disposition: attachment; filename="Reporte_Actividad_2026_03_16_21_45.pdf"
+Content-Length:      11855
+Content-Type:        application/pdf
+Date:                Tue, 17 Mar 2026 03:45:09 GMT
+Set-Cookie:          XSRF-TOKEN=eyJpdiI6Ik9sSmNhVWlXSVE4Y2dWR2JzWGdOMlE9PSIsInZhbHVlIjoiVE5oSEs4N05wSEFyeXJkWCsyNklnNW14dEFQRGROT1EyTWxITjdDVXR6aTN2SUVKczljcGRwVzgyNjNCUzU3L1R4S1prb0xLVmpmOSt0TU5mWHorOUFERGRqRmJxWko5ZEg4aGU0SDZSYWJFQjBGelIvOWYzZnVUb29YVlB2WVciLCJtYWMiOiJlNzA2ZjhkOWJhNTE5OGE5MWJhMmJiYjkzMWU3M2Y0YjEzNjZkMmMxOWZjYjFlZWZkMWIxYWZhMzAwNDY1OTM5IiwidGFnIjoiIn0%3D; expires=Tue, 17 Mar 2026 05:45:09 GMT; Max-Age=7199; path=/; samesite=lax
+Set-Cookie:          laravel-session=eyJpdiI6IjFBMjhyYklwV1NaenZ6WXZ3L3poZ3c9PSIsInZhbHVlIjoiWm5PTkJkNE5KV0c1dThWL1lPeUVGejFtcTZrM3QvdmIzYVhsQ2h3WUgzZUlzOFFFdy9zdm1mSGc3Zll5Q1NmSDNmS3U1S3c0ZTEvbEVFcERIbHp6cTYvV0p2WTFCQVpPMUVXRm5YQVBLWDVUVWtHcE1IQmVqTjBnbXF6RGE1V2YiLCJtYWMiOiJhYjJhMTNiNWIxOThjOWQ0Y2ViN2IzYzljM2U4OGYzY2NmMzc3N2FlYzMyZjI1NGVmZDRiMzUyMWYyNWFjMDU2IiwidGFnIjoiIn0%3D; expires=Tue, 17 Mar 2026 05:45:09 GMT; Max-Age=7199; path=/; httponly; samesite=lax
+Vary:                X-Inertia
+

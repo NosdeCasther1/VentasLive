@@ -9,6 +9,9 @@ use App\Models\Sale;
 use App\Models\Expense;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Maatwebsite\Excel\Facades\Excel;
+use App\Exports\ActivityExport;
 
 class ReportController extends Controller
 {
@@ -115,5 +118,72 @@ class ReportController extends Controller
             ],
             'mes' => $displayDate,
         ]);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        try {
+            $metricsResponse = $this->metrics($request);
+            $metrics = json_decode($metricsResponse->getContent(), true);
+            $activities = $this->getActivityHistory();
+
+            $pdf = Pdf::loadView('reports.activity-report', [
+                'metrics' => $metrics,
+                'activities' => $activities,
+                'mes' => $metrics['mes']
+            ]);
+            
+            $fileName = 'Reporte_Actividad_' . now()->format('Y_m_d_H_i') . '.pdf';
+            
+            return $pdf->download($fileName)
+                ->header('Content-Type', 'application/pdf')
+                ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
+        } catch (\Exception $e) {
+            dd("Error generando PDF: " . $e->getMessage(), $e->getTraceAsString());
+        }
+    }
+
+    public function exportExcel(Request $request)
+    {
+        try {
+            $metricsResponse = $this->metrics($request);
+            $metrics = json_decode($metricsResponse->getContent(), true);
+            $activities = $this->getActivityHistory();
+
+            $fileName = 'Reporte_Actividad_' . now()->format('Y_m_d_H_i') . '.xlsx';
+
+            return Excel::download(new ActivityExport($activities, $metrics), $fileName);
+        } catch (\Exception $e) {
+            dd("Error generando Excel: " . $e->getMessage(), $e->getTraceAsString());
+        }
+    }
+
+    private function getActivityHistory()
+    {
+        return Sale::with(['customer', 'cashRegister.user'])
+            ->orderBy('created_at', 'desc')
+            ->get()
+            ->map(function($sale) {
+                $isDraft = $sale->status === 'live_draft';
+                $color = $isDraft ? 'indigo' : 'emerald';
+                $type = $isDraft ? 'Bolsa Apartada' : 'Venta Completada';
+                $identifier = $sale->customer_name ?: ($sale->social_handle ? '@'.$sale->social_handle : 'Cliente General');
+                $text = $isDraft 
+                    ? "Nueva bolsa para $identifier" 
+                    : "Venta completada: $identifier";
+                
+                $userName = $sale->cashRegister && $sale->cashRegister->user 
+                    ? $sale->cashRegister->user->name 
+                    : 'System/Admin';
+
+                return [
+                    'time' => $sale->created_at->format('d/m/Y H:i'),
+                    'type' => $type,
+                    'text' => $text,
+                    'total' => $sale->total,
+                    'user_name' => $userName,
+                    'color' => $color
+                ];
+            });
     }
 }

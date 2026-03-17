@@ -79,6 +79,8 @@ Route::middleware(['auth'])->group(function () {
     // Reports and Settings (Admin Only)
     Route::middleware(['role:admin'])->group(function () {
         Route::get('api/reports/metrics', [\App\Http\Controllers\ReportController::class, 'metrics'])->name('reports.metrics');
+        Route::get('reportes/exportar/pdf', [\App\Http\Controllers\ReportController::class, 'exportPdf'])->name('reports.export.pdf');
+        Route::get('reportes/exportar/excel', [\App\Http\Controllers\ReportController::class, 'exportExcel'])->name('reports.export.excel');
         Route::get('reports/accounting', [\App\Http\Controllers\AccountingController::class, 'index'])->name('reports.accounting');
         Route::get('api/accounting/diario', [\App\Http\Controllers\AccountingController::class, 'getDiario'])->name('api.accounting.diario');
         Route::get('api/accounting/mayor', [\App\Http\Controllers\AccountingController::class, 'getMayor'])->name('api.accounting.mayor');
@@ -89,6 +91,9 @@ Route::middleware(['auth'])->group(function () {
         Route::get('settings', [\App\Http\Controllers\SettingController::class, 'index'])->name('settings.index');
         Route::post('settings', [\App\Http\Controllers\SettingController::class, 'update'])->name('settings.update');
         Route::resource('users', \App\Http\Controllers\UserController::class)->except(['index', 'create', 'show', 'edit']);
+        
+        // Historial de Actividad
+        Route::get('/historial-actividad', [\App\Http\Controllers\DashboardController::class, 'history'])->name('dashboard.history');
     });
 
     // Notification Routes
