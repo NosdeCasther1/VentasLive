@@ -16,11 +16,14 @@ import {
   MapPin,
   Fingerprint,
   Mail,
-  ShieldCheck
+  ShieldCheck,
+  Tag,
+  Search,
+  PlusCircle as PlusCircleIcon
 } from 'lucide-react';
 import Swal from 'sweetalert2';
 
-export default function SettingsIndex({ settings, users }) {
+export default function SettingsIndex({ settings, users, categories }) {
   const [activeTab, setActiveTab] = useState('empresa');
   const { auth } = usePage().props;
 
@@ -45,6 +48,16 @@ export default function SettingsIndex({ settings, users }) {
     role: 'cashier',
   });
 
+  // Form for Category (Create/Edit)
+  const [editingCategory, setEditingCategory] = useState(null);
+  const categoryForm = useForm({
+    name: '',
+    description: '',
+    max_discount_percent: '0',
+  });
+
+  const [categorySearch, setCategorySearch] = useState('');
+  
   const handleSettingsSubmit = (e) => {
     e.preventDefault();
     settingsForm.post(route('settings.update'), {
@@ -78,6 +91,26 @@ export default function SettingsIndex({ settings, users }) {
     }
   };
 
+  const handleCategorySubmit = (e) => {
+    e.preventDefault();
+    if (editingCategory) {
+      categoryForm.put(route('categories.update', editingCategory.id), {
+        onSuccess: () => {
+          setEditingCategory(null);
+          categoryForm.reset();
+          Swal.fire('Éxito', 'Categoría actualizada', 'success');
+        },
+      });
+    } else {
+      categoryForm.post(route('categories.store'), {
+        onSuccess: () => {
+          categoryForm.reset();
+          Swal.fire('Éxito', 'Categoría creada', 'success');
+        },
+      });
+    }
+  };
+
   const deleteUser = (id) => {
     Swal.fire({
       title: '¿Estás seguro?',
@@ -97,6 +130,28 @@ export default function SettingsIndex({ settings, users }) {
     });
   };
 
+  const deleteCategory = (id) => {
+    Swal.fire({
+      title: '¿Estás seguro?',
+      text: "Esta acción no se puede deshacer",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#d33',
+      cancelButtonColor: '#3085d6',
+      confirmButtonText: 'Sí, eliminar',
+      cancelButtonText: 'Cancelar'
+    }).then((result) => {
+      if (result.isConfirmed) {
+        categoryForm.delete(route('categories.destroy', id), {
+          onSuccess: () => Swal.fire('Eliminado', 'La categoría ha sido eliminada', 'success'),
+          onError: (errors) => {
+            Swal.fire('Error', errors.category || 'No se pudo eliminar la categoría', 'error');
+          }
+        });
+      }
+    });
+  };
+
   const startEdit = (user) => {
     setEditingUser(user);
     userForm.setData({
@@ -104,6 +159,15 @@ export default function SettingsIndex({ settings, users }) {
       email: user.email,
       password: '',
       role: user.role,
+    });
+  };
+
+  const startEditCategory = (cat) => {
+    setEditingCategory(cat);
+    categoryForm.setData({
+      name: cat.name,
+      description: cat.description || '',
+      max_discount_percent: cat.max_discount_percent,
     });
   };
 
@@ -136,6 +200,12 @@ export default function SettingsIndex({ settings, users }) {
               className={`flex items-center px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'usuarios' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
             >
               <Users size={18} className="mr-2" /> Usuarios y Roles
+            </button>
+            <button 
+              onClick={() => setActiveTab('categorias')}
+              className={`flex items-center px-6 py-2.5 rounded-lg text-sm font-bold transition-all ${activeTab === 'categorias' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-200/50'}`}
+            >
+              <Tag size={18} className="mr-2" /> Categorías y Descuentos
             </button>
             <button 
               onClick={() => setActiveTab('preferencias')}
@@ -338,7 +408,134 @@ export default function SettingsIndex({ settings, users }) {
               </div>
             )}
 
-            {/* TAB 3: PREFERENCIAS */}
+            {/* TAB 3: CATEGORIAS */}
+            {activeTab === 'categorias' && (
+              <div className="p-8">
+                <div className="flex flex-col lg:flex-row gap-8">
+                  {/* Formulario de Categoría */}
+                  <div className="lg:w-1/3 p-6 bg-slate-50 rounded-2xl border border-slate-100 h-fit">
+                    <h3 className="font-bold text-slate-800 mb-4 flex items-center">
+                      {editingCategory ? <Edit size={18} className="mr-2 text-amber-500" /> : <PlusCircleIcon size={18} className="mr-2 text-emerald-500" />}
+                      {editingCategory ? 'Editar Categoría' : 'Nueva Categoría'}
+                    </h3>
+                    <form onSubmit={handleCategorySubmit} className="space-y-4">
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Nombre de la Categoría</label>
+                        <input 
+                          type="text" 
+                          required
+                          value={categoryForm.data.name}
+                          onChange={e => categoryForm.setData('name', e.target.value)}
+                          className={`w-full mt-1 border rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none ${categoryForm.errors.name ? 'border-red-500 bg-red-50' : 'border-slate-200'}`}
+                        />
+                        {categoryForm.errors.name && <p className="text-red-500 text-[10px] mt-1 font-bold">{categoryForm.errors.name}</p>}
+                      </div>
+                      <div>
+                        <label className="text-xs font-bold text-slate-500 uppercase">Descripción</label>
+                        <textarea 
+                          rows="2"
+                          value={categoryForm.data.description}
+                          onChange={e => categoryForm.setData('description', e.target.value)}
+                          className="w-full mt-1 border border-slate-200 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-indigo-500 outline-none transition-all resize-none"
+                        ></textarea>
+                      </div>
+                      <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                        <label className="text-xs font-bold text-indigo-600 uppercase flex items-center">
+                          <ShieldCheck size={14} className="mr-1" /> Límite de Descuento (Cashier)
+                        </label>
+                        <div className="flex items-center space-x-3 mt-2">
+                           <input 
+                            type="number" 
+                            min="0"
+                            max="100"
+                            required
+                            value={categoryForm.data.max_discount_percent}
+                            onChange={e => categoryForm.setData('max_discount_percent', e.target.value)}
+                            className="w-24 border border-indigo-200 rounded-lg p-2 text-center font-bold text-indigo-700 outline-none focus:ring-2 focus:ring-indigo-500"
+                          />
+                          <span className="text-lg font-bold text-indigo-400">%</span>
+                        </div>
+                        <p className="text-[10px] text-indigo-400 mt-2 leading-tight">Define el porcentaje máximo que un cajero puede otorgar para productos de esta categoría.</p>
+                      </div>
+                      <div className="pt-2 flex space-x-2">
+                        <button 
+                          type="submit" 
+                          disabled={categoryForm.processing}
+                          className={`flex-1 py-2.5 rounded-lg text-sm font-bold text-white shadow-md transition-all ${editingCategory ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+                        >
+                          {editingCategory ? 'Actualizar' : 'Crear Categoría'}
+                        </button>
+                        {editingCategory && (
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setEditingCategory(null);
+                              categoryForm.reset();
+                            }}
+                            className="px-4 py-2.5 rounded-lg text-sm font-bold text-slate-600 border border-slate-200 hover:bg-slate-100"
+                          >
+                            Cancelar
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Tabla de Categorías */}
+                  <div className="flex-1 overflow-x-auto">
+                    <div className="mb-4 relative group">
+                      <Search className="w-5 h-5 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
+                      <input 
+                        type="text"
+                        value={categorySearch}
+                        onChange={(e) => setCategorySearch(e.target.value)}
+                        placeholder="Buscar categorías por nombre o descripción..."
+                        className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:bg-white focus:border-indigo-500 outline-none transition-all"
+                      />
+                    </div>
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-100">
+                          <th className="text-left py-4 px-2 text-xs font-bold text-slate-400 uppercase">Categoría</th>
+                          <th className="text-left py-4 px-4 text-xs font-bold text-slate-400 uppercase">Límite Descuento</th>
+                          <th className="text-right py-4 px-2 text-xs font-bold text-slate-400 uppercase">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {categories && categories
+                          .filter(cat => 
+                            cat.name.toLowerCase().includes(categorySearch.toLowerCase()) || 
+                            (cat.description && cat.description.toLowerCase().includes(categorySearch.toLowerCase()))
+                          )
+                          .map(cat => (
+                          <tr key={cat.id} className="hover:bg-slate-50/50 group transition-colors">
+                            <td className="py-4 px-2">
+                              <p className="font-bold text-slate-800">{cat.name}</p>
+                              <p className="text-xs text-slate-500">{cat.description || 'Sin descripción'}</p>
+                            </td>
+                            <td className="py-4 px-4">
+                              <div className="flex items-center">
+                                <span className={`text-xs font-black px-3 py-1 rounded-full ${cat.max_discount_percent > 0 ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-100 text-slate-400'}`}>
+                                  {cat.max_discount_percent}%
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-4 px-2 text-right">
+                              <div className="flex justify-end space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => startEditCategory(cat)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all"><Edit size={16} /></button>
+                                <button onClick={() => deleteCategory(cat.id)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"><Trash2 size={16} /></button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: PREFERENCIAS */}
             {activeTab === 'preferencias' && (
               <form onSubmit={handleSettingsSubmit} className="p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">

@@ -38,6 +38,7 @@ Route::middleware(['auth'])->group(function () {
             Route::resource('suppliers', \App\Http\Controllers\SupplierController::class)->except(['index', 'create', 'show', 'edit']);
             Route::get('suppliers/export-pdf', [\App\Http\Controllers\SupplierController::class, 'exportPdf'])->name('suppliers.export-pdf');
             Route::get('suppliers/export-excel', [\App\Http\Controllers\SupplierController::class, 'exportExcel'])->name('suppliers.export-excel');
+            Route::resource('categories', \App\Http\Controllers\CategoryController::class)->except(['index', 'create', 'show', 'edit']);
         });
         Route::post('sales', [\App\Http\Controllers\POSController::class, 'store'])->name('sales.store');
         Route::post('sales/delivery', [\App\Http\Controllers\POSController::class, 'storeDelivery'])->name('sales.storeDelivery');

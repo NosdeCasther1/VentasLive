@@ -13,7 +13,8 @@ class SettingController extends Controller
     {
         return Inertia::render('Settings/Index', [
             'settings' => Setting::all()->pluck('value', 'key'),
-            'users' => User::all()
+            'users' => User::all(),
+            'categories' => \App\Models\Category::all(),
         ]);
     }
 

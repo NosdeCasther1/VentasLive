@@ -131,11 +131,19 @@ class POSController extends Controller
         $discount = $request->discount ?? 0;
         $precioFinal = $subtotal - $discount;
 
-        // Reglas de Negocio Anti-Pérdidas
+        // Reglas de Negocio Anti-Pérdidas con Límite Dinámico por Categoría
+        $maxDiscountAllowed = 0;
+        foreach ($request->items as $item) {
+            $variant = ProductVariant::with('product.category')->find($item['variant_id']);
+            $itemSubtotal = $item['price'] * $item['quantity'];
+            $categoryLimit = $variant->product->category->max_discount_percent ?? 0;
+            $maxDiscountAllowed += ($itemSubtotal * ($categoryLimit / 100));
+        }
+
         if ($user->role === 'cashier') {
-            // Límite de descuento (15%)
-            if ($subtotal > 0 && ($discount / $subtotal) > 0.15) {
-                return redirect()->back()->withErrors(['discount' => 'Límite excedido. Los cajeros solo pueden dar hasta un 15% de descuento.']);
+            // Límite de descuento dinámico
+            if ($subtotal > 0 && $discount > ($maxDiscountAllowed + 0.01)) { // +0.01 for float precision
+                return redirect()->back()->withErrors(['discount' => "Límite excedido. Para esta combinación de productos, el descuento máximo permitido es Q " . number_format($maxDiscountAllowed, 2)]);
             }
 
             // Alerta de Pérdida (Precio Final < Total PMP)
@@ -143,8 +151,8 @@ class POSController extends Controller
                 return redirect()->back()->withErrors(['discount' => "Alerta de Pérdida: No puedes vender por debajo del costo de inventario (Q " . number_format($totalPMP, 2) . ")."]);
             }
         } elseif ($user->role === 'admin') {
-            if ($precioFinal < $totalPMP || ($subtotal > 0 && ($discount / $subtotal) > 0.15)) {
-                \Log::warning("Venta autorizada por admin con pérdida o descuento alto. Usuario: {$user->name}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}");
+            if ($precioFinal < $totalPMP || ($subtotal > 0 && $discount > $maxDiscountAllowed)) {
+                \Log::warning("Venta autorizada por admin con pérdida o descuento superior al límite de categoría. Usuario: {$user->name}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}, Descuento Aplicado: Q {$discount}, Máximo Permitido: Q {$maxDiscountAllowed}");
             }
         }
 
@@ -251,16 +259,25 @@ class POSController extends Controller
         $discount = $request->discount ?? 0;
         $precioFinal = $itemsSubtotal - $discount;
 
+        // Reglas de Negocio Anti-Pérdidas con Límite Dinámico por Categoría
+        $maxDiscountAllowed = 0;
+        foreach ($request->items as $item) {
+            $variant = ProductVariant::with('product.category')->find($item['variant_id']);
+            $itemSubtotal = $item['price'] * $item['quantity'];
+            $categoryLimit = $variant->product->category->max_discount_percent ?? 0;
+            $maxDiscountAllowed += ($itemSubtotal * ($categoryLimit / 100));
+        }
+
         if ($user->role === 'cashier') {
-            if ($itemsSubtotal > 0 && ($discount / $itemsSubtotal) > 0.15) {
-                return redirect()->back()->withErrors(['discount' => 'Límite excedido. Los cajeros solo pueden dar hasta un 15% de descuento.']);
+            if ($itemsSubtotal > 0 && $discount > ($maxDiscountAllowed + 0.01)) {
+                return redirect()->back()->withErrors(['discount' => "Límite excedido. Para esta combinación de productos, el descuento máximo permitido es Q " . number_format($maxDiscountAllowed, 2)]);
             }
             if ($precioFinal < $totalPMP) {
                 return redirect()->back()->withErrors(['discount' => "Alerta de Pérdida: No puedes vender por debajo del costo de inventario (Q " . number_format($totalPMP, 2) . ")."]);
             }
         } elseif ($user->role === 'admin') {
-            if ($precioFinal < $totalPMP || ($itemsSubtotal > 0 && ($discount / $itemsSubtotal) > 0.15)) {
-                \Log::warning("Envío autorizado por admin con pérdida o descuento alto. Usuario: {$user->name}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}");
+            if ($precioFinal < $totalPMP || ($itemsSubtotal > 0 && $discount > $maxDiscountAllowed)) {
+                \Log::warning("Envío autorizado por admin con pérdida o descuento superior al límite de categoría. Usuario: {$user->name}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}, Descuento Aplicado: Q {$discount}, Máximo Permitido: Q {$maxDiscountAllowed}");
             }
         }
 

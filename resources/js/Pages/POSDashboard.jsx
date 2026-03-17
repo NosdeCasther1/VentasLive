@@ -46,7 +46,8 @@ import {
   LogOut,
   UserCircle,
   RefreshCw,
-  RotateCcw
+  RotateCcw,
+  Tag
 } from 'lucide-react';
 import { Head, router, Link, useForm } from '@inertiajs/react';
 import axios from 'axios';
@@ -458,7 +459,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           {activeTab === 'reporte-live' && <LiveReport />}
           {activeTab === 'contabilidad' && <AccountingReports auth={auth} />}
           {activeTab === 'gastos' && <ExpensesView auth={auth} />}
-          {activeTab === 'configuracion' && <SettingsIndex auth={auth} settings={settings} users={users} />}
+          {activeTab === 'configuracion' && <SettingsIndex auth={auth} settings={settings} users={users} categories={categories} />}
         </div>
       </main>
 
@@ -641,6 +642,8 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedVariant, setSelectedVariant] = useState(null);
   const [quantity, setQuantity] = useState(1);
+  const [discount, setDiscount] = useState(0);
+  const [promoManualDiscount, setPromoManualDiscount] = useState(0);
   const [isAddingToBag, setIsAddingToBag] = useState(false);
   
   // Estados para Gemini AI
@@ -663,6 +666,54 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
   });
   const [isProcessingCheckout, setIsProcessingCheckout] = useState(false);
   const [cancellingIds, setCancellingIds] = useState([]);
+  
+  // Teleprompter de Ofertas (Phase 3)
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [promoSearchQuery, setPromoSearchQuery] = useState('');
+  const [promoResults, setPromoResults] = useState([]);
+
+  // Lógica de búsqueda para el Teleprompter (Phase 3)
+  useEffect(() => {
+    if (!promoSearchQuery) {
+      setPromoResults([]);
+      return;
+    }
+
+    const query = promoSearchQuery.toLowerCase();
+    const results = products.flatMap(p => 
+      (p.variants || [])
+        .filter(v => 
+          v.stock > 0 && 
+          (`${p.name} ${v.size || ''} ${v.color || ''} ${v.sku}`.toLowerCase().includes(query))
+        )
+        .map(v => ({
+          ...v,
+          product_name: p.name,
+          category_max: p.category?.max_discount_percent || 0
+        }))
+    ).slice(0, 15);
+
+    setPromoResults(results);
+  }, [promoSearchQuery, products]);
+
+  const handleOpenPromoModal = () => {
+    setPromoSearchQuery('');
+    setPromoResults([]);
+    setIsPromoModalOpen(true);
+  };
+
+  const selectPromoProduct = (variant) => {
+    setSearchQuery(`${variant.product_name} - ${variant.size || ''} ${variant.color || ''}`);
+    setSelectedVariant(variant);
+    setDiscount(promoManualDiscount);
+    setIsPromoModalOpen(false);
+    
+    // reset manual promo discount for next use
+    setPromoManualDiscount(0);
+    
+    // Auto-scroll to top to see the assignment bar
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   // Historial de artículos liberados
   const [cancelledItems, setCancelledItems] = useState([]);
@@ -706,6 +757,25 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
 
   const handleCheckoutSubmit = (e) => {
     e.preventDefault();
+
+    const discountVal = parseFloat(checkoutData.discount) || 0;
+    const subtotal = checkoutBag.details.reduce((sum, d) => sum + (d.selling_price * d.quantity), 0);
+    
+    // Calcular límite máximo permitido por categorías
+    const maxDiscountAllowed = checkoutBag.details.reduce((sum, d) => {
+      const categoryLimit = d.product_variant?.product?.category?.max_discount_percent || 0;
+      return sum + ((d.selling_price * d.quantity) * (categoryLimit / 100));
+    }, 0);
+
+    if (auth?.user?.role === 'cashier' && discountVal > (maxDiscountAllowed + 0.05)) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Límite de Descuento Excedido',
+        text: `El descuento máximo permitido para estos productos es Q ${maxDiscountAllowed.toFixed(2)}.`,
+      });
+      return;
+    }
+
     setIsProcessingCheckout(true);
     
     router.post(route('live.checkout', checkoutBag.id), checkoutData, {
@@ -817,7 +887,8 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
         social_handle: username,
         client_id: selectedClientId,
         variant_id: selectedVariant.id,
-        quantity: quantity
+        quantity: quantity,
+        discount: discount
       });
       
       if (response.status === 200) {
@@ -965,7 +1036,8 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
             )}
           </div>
         </div>
-        <div className="flex items-center space-x-3">
+      </div>
+      <div className="flex items-center space-x-3">
           <div className="text-slate-500 font-medium font-mono text-lg bg-white px-4 py-1 rounded-lg border border-slate-200 shadow-sm min-w-[100px] text-center">
             {sessionTimer}
           </div>
@@ -995,14 +1067,28 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
             </button>
           )}
         </div>
-      </div>
-
+      
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-0">
         
         {/* Panel Captura (Izquierda) */}
-        <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col overflow-y-auto">
+        <div className="lg:col-span-4 bg-white rounded-xl shadow-sm border border-slate-200 p-0 flex flex-col overflow-y-auto overflow-x-hidden">
           
-          {/* SECCIÓN GEMINI AI */}
+          {/* BOTÓN PROMOCIONAR (PHASE 3) */}
+          <button 
+            onClick={handleOpenPromoModal}
+            className="m-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white p-4 rounded-2xl shadow-lg shadow-amber-200 flex items-center justify-center hover:scale-[1.02] transition-transform group"
+          >
+            <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-3 group-hover:rotate-12 transition-transform">
+              <Sparkles className="w-6 h-6" />
+            </div>
+            <div className="text-left">
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Teleprompter de Ofertas</p>
+              <p className="font-bold text-lg leading-tight">Promocionar Producto</p>
+            </div>
+          </button>
+
+          <div className="px-6 pb-6 space-y-6">
+            {/* SECCIÓN GEMINI AI */}
           <div className="bg-indigo-50/50 border border-indigo-100 rounded-xl p-4 mb-6 relative overflow-hidden">
             <div className="absolute -right-4 -top-4 text-indigo-100 opacity-50">
               <Sparkles className="w-24 h-24" />
@@ -1112,6 +1198,29 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
               </div>
             </div>
 
+            <div className="pt-2">
+              <label className="block text-xs font-bold text-indigo-600 uppercase mb-1 flex items-center">
+                <Tag size={12} className="mr-1" /> Descuento Manual (%)
+              </label>
+              <div className="relative">
+                <input 
+                  type="number" 
+                  min="0"
+                  max="100"
+                  value={discount}
+                  onChange={(e) => setDiscount(Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                  className="w-full border border-indigo-200 rounded-lg p-3 bg-indigo-50/30 font-black text-indigo-600 focus:bg-white focus:border-indigo-500 outline-none transition-all" 
+                  placeholder="0"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-indigo-300">%</span>
+              </div>
+              {selectedVariant && selectedVariant.product.category.max_discount_percent > 0 && (
+                <p className="text-[10px] text-slate-400 mt-1 italic">
+                  Límite para esta categoría: {selectedVariant.product.category.max_discount_percent}%
+                </p>
+              )}
+            </div>
+
             <button 
               onClick={handleAddToBag}
               disabled={isAddingToBag || !username || !selectedVariant}
@@ -1122,6 +1231,7 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
             </button>
           </div>
         </div>
+      </div>
 
         {/* Panel Consolidación (Derecha) */}
         <div className="lg:col-span-8 bg-white rounded-xl shadow-sm border border-slate-200 p-6 flex flex-col">
@@ -1440,6 +1550,125 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+      {/* MODAL TELEPROMPTER DE OFERTAS (PHASE 3) */}
+      {isPromoModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20">
+            {/* Header con gradiente */}
+            <div className="px-8 py-6 bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-4">
+                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
+                  <Sparkles className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-2xl tracking-tight">Teleprompter de Ofertas</h3>
+                  <p className="text-amber-100 text-xs font-bold uppercase tracking-widest opacity-80">Phase 3: Motor de Promoción Dinámica</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPromoModalOpen(false)} 
+                className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors"
+              >
+                <Plus className="w-8 h-8 rotate-45" />
+              </button>
+            </div>
+
+            {/* Buscador de Ofertas + Descuento Manual */}
+            <div className="p-8 bg-slate-50 border-b border-slate-200 shrink-0 flex flex-col md:flex-row gap-4 items-center">
+              <div className="relative group flex-1 w-full">
+                <Search className="w-6 h-6 absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
+                <input 
+                  autoFocus
+                  type="text" 
+                  value={promoSearchQuery}
+                  onChange={(e) => setPromoSearchQuery(e.target.value)}
+                  placeholder="Busca por nombre, categoría, talla o color para promocionar..." 
+                  className="w-full pl-14 pr-6 py-5 bg-white border-2 border-slate-200 rounded-2xl text-lg font-medium shadow-sm focus:border-orange-500 focus:ring-4 focus:ring-orange-50 outline-none transition-all"
+                />
+              </div>
+              <div className="w-full md:w-auto shrink-0">
+                <label className="block text-[10px] font-black text-orange-600 uppercase mb-1 ml-1">Descuento Manual (%)</label>
+                <div className="relative">
+                  <input 
+                    type="number" 
+                    min="0"
+                    max="100"
+                    value={promoManualDiscount}
+                    onChange={(e) => setPromoManualDiscount(parseInt(e.target.value) || 0)}
+                    className="w-full md:w-32 bg-white border-2 border-slate-200 rounded-2xl py-5 px-6 text-xl font-black text-orange-600 focus:border-orange-500 outline-none transition-all text-center"
+                    placeholder="0"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-orange-200">%</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Resultados de Ofertas */}
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-white">
+              {!promoSearchQuery ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                  <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                    <Search className="w-12 h-12 opacity-20" />
+                  </div>
+                  <p className="font-bold text-lg">Escribe algo para encontrar ofertas</p>
+                  <p className="text-sm">Busca productos con stock disponible</p>
+                </div>
+              ) : promoResults.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                  <Package className="w-16 h-16 mb-4 opacity-10" />
+                  <p className="font-bold">No se encontraron productos con stock para "{promoSearchQuery}"</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {promoResults.map(v => (
+                    <div 
+                      key={v.id}
+                      onClick={() => selectPromoProduct(v)}
+                      className="group p-5 border-2 border-slate-50 rounded-2xl hover:border-orange-500 hover:bg-orange-50/30 transition-all cursor-pointer flex justify-between items-center relative overflow-hidden"
+                    >
+                      {/* Badge de Descuento Sugerido */}
+                      <div className="absolute -right-12 -top-12 w-24 h-24 bg-orange-500/10 group-hover:bg-orange-500/20 rounded-full transition-colors"></div>
+                      
+                      <div className="relative z-10 flex-1">
+                        <p className="font-black text-slate-800 text-lg group-hover:text-orange-950 transition-colors">{v.product_name}</p>
+                        <p className="text-sm text-slate-500 font-bold mb-3">{v.size || 'Unica'} / {v.color || 'N/A'} (SKU: {v.sku})</p>
+                        
+                        <div className="flex flex-wrap gap-2">
+                          <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase">Stock: {v.stock}</span>
+                          <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-black uppercase">Q {parseFloat(v.selling_price).toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 text-right space-y-2 ml-4">
+                         <p className="text-[10px] font-black text-orange-600 uppercase tracking-tighter">Descuentos Sugeridos</p>
+                         <div className="flex gap-1 justify-end">
+                            <span className="bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm">-5%</span>
+                            <span className="bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm">-10%</span>
+                            <span className="bg-orange-700 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm">-15%</span>
+                            <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-1 rounded-md shadow-sm">MAX {v.category_max}%</span>
+                         </div>
+                         <button className="mt-2 text-orange-600 font-black text-xs group-hover:underline flex items-center justify-end">
+                           PROMOCIONAR <ChevronRight className="w-4 h-4 ml-1" />
+                         </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <div className="px-8 py-4 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
+              <p className="text-xs text-slate-400 font-medium">Mostrando hasta 15 resultados con stock disponible.</p>
+              <button 
+                onClick={() => setIsPromoModalOpen(false)}
+                className="bg-white border-2 border-slate-200 text-slate-600 px-6 py-2 rounded-xl font-black text-sm hover:bg-slate-50 transition-colors"
+              >
+                Cerrar Teleprompter
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -2551,6 +2780,35 @@ function POSView({ auth, products, customers = [], initialAction, setInitialActi
   });
   const [isSavingQuickCustomer, setIsSavingQuickCustomer] = useState(false);
 
+  // Teleprompter de Ofertas (Phase 3)
+  const [isPromoModalOpen, setIsPromoModalOpen] = useState(false);
+  const [promoSearchQuery, setPromoSearchQuery] = useState('');
+  const [promoResults, setPromoResults] = useState([]);
+
+  // Lógica de búsqueda para el Teleprompter (Phase 3)
+  useEffect(() => {
+    if (!promoSearchQuery) {
+      setPromoResults([]);
+      return;
+    }
+
+    const query = promoSearchQuery.toLowerCase();
+    const results = products.flatMap(p => 
+      (p.variants || [])
+        .filter(v => 
+          v.stock > 0 && 
+          (`${p.name} ${v.size || ''} ${v.color || ''} ${v.sku}`.toLowerCase().includes(query))
+        )
+        .map(v => ({
+          ...v,
+          product_name: p.name,
+          category_max: p.category?.max_discount_percent || 0
+        }))
+    ).slice(0, 15);
+
+    setPromoResults(results);
+  }, [promoSearchQuery, products]);
+
   // Verificación de duplicados en tiempo real
   const [duplicateWarning, setDuplicateWarning] = useState(null);
 
@@ -2831,6 +3089,25 @@ function POSView({ auth, products, customers = [], initialAction, setInitialActi
     let change = 0;
     const subtotal = total;
     const discountVal = parseFloat(posDiscount) || 0;
+    
+    // Calcular límite máximo de descuento dinámico
+    const maxDiscountPossible = cart.reduce((sum, item) => {
+      const categoryLimit = item.category?.max_discount_percent || 0;
+      return sum + ((item.price * item.qty) * (categoryLimit / 100));
+    }, 0);
+
+    const isOverLimit = discountVal > (maxDiscountPossible + 0.05); // Margen de redondeo
+
+    if (auth?.user?.role === 'cashier' && isOverLimit) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Descuento no autorizado',
+        text: `El descuento máximo permitido para esta combinación de productos es Q ${maxDiscountPossible.toFixed(2)}.`,
+        confirmButtonColor: '#4f46e5'
+      });
+      return;
+    }
+
     const finalTotal = posDiscountType === 'percentage' 
       ? subtotal - (subtotal * (discountVal / 100))
       : subtotal - discountVal;
@@ -2878,6 +3155,18 @@ function POSView({ auth, products, customers = [], initialAction, setInitialActi
     });
   };
 
+  // Helper para el UI
+  const maxDiscountPossible = cart.reduce((sum, item) => {
+    const categoryLimit = item.category?.max_discount_percent || 0;
+    return sum + ((item.price * item.qty) * (categoryLimit / 100));
+  }, 0);
+
+  const currentDiscountAmount = posDiscountType === 'percentage' 
+    ? total * (parseFloat(posDiscount || 0) / 100)
+    : parseFloat(posDiscount || 0);
+
+  const isOverLimitInPOS = (auth?.user?.role === 'cashier' && currentDiscountAmount > (maxDiscountPossible + 0.05));
+
   const submitSale = async (type, extraData = {}) => {
     const payload = {
       customer_id: selectedCustomer?.id || null,
@@ -2905,7 +3194,6 @@ function POSView({ auth, products, customers = [], initialAction, setInitialActi
           setIsShippingModalOpen(false);
           
           if(page.props.flash && page.props.flash.sale) {
-              setLastSaleData(page.props.flash.sale);
               setReceiptPhone(type === 'shipping' ? shippingPhone : '');
               setIsReceiptModalOpen(true);
           }
@@ -2913,6 +3201,32 @@ function POSView({ auth, products, customers = [], initialAction, setInitialActi
       });
     } catch (error) {
       console.error(error);
+    }
+  };
+
+  const handleOpenPromoModal = () => {
+    setPromoSearchQuery('');
+    setPromoResults([]);
+    setIsPromoModalOpen(true);
+  };
+
+  const selectPromoProduct = (variant) => {
+    // Buscar el producto base para poder agregarlo con su variante
+    const product = products.find(p => p.id === (variant.product_id || variant.parent_id));
+    if (product) {
+      addToCartVariant(product, variant);
+      setIsPromoModalOpen(false);
+      
+      // Feedback visual
+      Swal.fire({
+        title: '¡Producto Seleccionado!',
+        text: `${product.name} (${variant.size || ''} ${variant.color || ''}) listo para la venta.`,
+        icon: 'success',
+        toast: true,
+        position: 'top-end',
+        showConfirmButton: false,
+        timer: 3000
+      });
     }
   };
 
@@ -2991,6 +3305,21 @@ ${itemsText}
     <div className="h-full flex flex-col lg:flex-row gap-6">
       {/* PANEL IZQUIERDO: CATÁLOGO DE PRODUCTOS */}
       <div className="w-full lg:w-[65%] bg-white rounded-xl shadow-sm border border-slate-200 p-4 flex flex-col relative z-0">
+        
+        {/* BOTÓN PROMOCIONAR (PHASE 3) */}
+        <button 
+          onClick={handleOpenPromoModal}
+          className="mb-4 bg-gradient-to-r from-amber-500 to-orange-600 text-white p-4 rounded-2xl shadow-lg shadow-amber-200 flex items-center justify-center hover:scale-[1.01] transition-transform group"
+        >
+          <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-3 group-hover:rotate-12 transition-transform">
+            <Sparkles className="w-6 h-6" />
+          </div>
+          <div className="text-left">
+            <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Teleprompter de Ofertas</p>
+            <p className="font-bold text-lg leading-tight">Promocionar Producto</p>
+          </div>
+        </button>
+
         <h2 className="text-lg font-bold text-slate-800 mb-3">Catálogo de Productos</h2>
         <div className="relative mb-4">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -2999,7 +3328,7 @@ ${itemsText}
         
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3 overflow-y-auto pr-2 pb-4">
           {inventory.map(item => {
-            const totalStock = item.variants ? item.variants.reduce((sum, v) => sum + v.stock, 0) : item.stock || 0;
+            const totalStock = item.variants ? item.variants.reduce((sum, v) => sum + v.stock, 0) : (item.stock || 0);
             return (
               <div key={item.id} onClick={() => handleProductClick(item)} className="border border-slate-200 rounded-lg p-2 cursor-pointer hover:border-indigo-500 hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 group bg-white flex flex-col">
                 <div className="w-full aspect-square mb-2 text-center bg-slate-50 rounded flex items-center justify-center overflow-hidden">
@@ -3149,7 +3478,6 @@ ${itemsText}
             </div>
           </div>
         </div>
-
       </div>
 
       {/* --- MODAL DE SELECCIÓN DE VARIANTE --- */}
@@ -3392,7 +3720,31 @@ ${itemsText}
               <button onClick={() => setIsReceiptModalOpen(false)} className="text-slate-500 hover:text-slate-800"><Plus className="w-6 h-6 rotate-45" /></button>
             </div>
             
-            {/* AREA DE IMPRESIÓN */}
+            {/* ACCIONES RÁPIDAS */}
+            <div className="flex space-x-3 mb-6">
+              <button 
+                onClick={handleOpenPromoModal}
+                className="flex-1 bg-gradient-to-r from-amber-500 to-orange-600 text-white p-4 rounded-2xl shadow-lg shadow-amber-200 flex items-center justify-center hover:scale-[1.02] transition-transform group"
+              >
+                <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center mr-3 group-hover:rotate-12 transition-transform">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div className="text-left">
+                  <p className="text-[10px] font-black uppercase tracking-widest opacity-80">Teleprompter de Ofertas</p>
+                  <p className="font-bold text-lg">Promocionar Producto</p>
+                </div>
+              </button>
+
+              <button 
+                onClick={handleStartLive}
+                className="bg-white border-2 border-slate-100 text-slate-600 px-6 rounded-2xl flex items-center justify-center hover:bg-slate-50 transition-colors"
+              >
+                <div className="text-center">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Sesión</p>
+                  <p className="font-bold">Nueva</p>
+                </div>
+              </button>
+            </div>
             <div id="ticket-imprimible" className="bg-white p-6 w-[80mm] min-h-[100mm] mx-auto overflow-y-auto max-h-[60vh] text-black font-mono text-sm leading-tight border-b-2 border-r-2 border-slate-200" style={{ textRendering: 'geometricPrecision', WebkitFontSmoothing: 'none' }}>
               <div className="text-center mb-4">
                 <h2 className="font-bold text-xl uppercase mb-1">Variedades POS</h2>
@@ -3593,6 +3945,88 @@ ${itemsText}
         </div>
       )}
 
+      {/* MODAL TELEPROMPTER DE OFERTAS (PHASE 3) */}
+      {isPromoModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+          <div className="bg-white rounded-[2rem] shadow-2xl w-full max-w-4xl overflow-hidden flex flex-col max-h-[90vh] border border-white/20">
+            <div className="px-8 py-6 bg-gradient-to-r from-amber-500 via-orange-600 to-rose-600 text-white flex justify-between items-center shrink-0">
+              <div className="flex items-center space-x-4">
+                <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-sm">
+                  <Sparkles className="w-8 h-8 text-white" />
+                </div>
+                <div>
+                  <h3 className="font-black text-2xl tracking-tight">Teleprompter de Ofertas</h3>
+                  <p className="text-amber-100 text-xs font-bold uppercase tracking-widest opacity-80">Venta Manual / Post-Live</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPromoModalOpen(false)} 
+                className="bg-white/10 hover:bg-white/20 p-2 rounded-full transition-colors"
+              >
+                <Plus className="w-8 h-8 rotate-45" />
+              </button>
+            </div>
+
+            <div className="p-8 bg-slate-50 border-b border-slate-200 shrink-0">
+              <div className="relative group">
+                <Search className="w-6 h-6 absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors" />
+                <input 
+                  autoFocus
+                  type="text" 
+                  value={promoSearchQuery}
+                  onChange={(e) => setPromoSearchQuery(e.target.value)}
+                  placeholder="Busca por nombre, categoría, talla o color para promocionar..." 
+                  className="w-full pl-14 pr-6 py-5 bg-white border-2 border-slate-200 rounded-2xl text-lg font-medium shadow-sm focus:border-orange-500 focus:ring-4 focus:ring-orange-50 outline-none transition-all"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar bg-white">
+              {!promoSearchQuery ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                  <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center mb-4">
+                    <Search className="w-12 h-12 opacity-20" />
+                  </div>
+                  <p className="font-bold text-lg">Escribe algo para promocionar</p>
+                </div>
+              ) : promoResults.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-400 py-12">
+                  <Package className="w-16 h-16 mb-4 opacity-10" />
+                  <p className="font-bold">No hay coincidencias con stock.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {promoResults.map(v => (
+                    <div 
+                      key={v.id}
+                      onClick={() => selectPromoProduct(v)}
+                      className="group p-5 border-2 border-slate-50 rounded-2xl hover:border-orange-500 hover:bg-orange-50/30 transition-all cursor-pointer flex justify-between items-center relative overflow-hidden"
+                    >
+                      <div className="relative z-10 flex-1">
+                        <p className="font-black text-slate-800 text-lg group-hover:text-orange-950">{v.product_name}</p>
+                        <p className="text-sm text-slate-500 font-bold mb-3">{v.size || 'Unica'} / {v.color || 'N/A'}</p>
+                        <div className="flex gap-2">
+                          <span className="bg-slate-100 text-slate-700 px-3 py-1 rounded-lg text-[10px] font-black">Stock: {v.stock}</span>
+                          <span className="bg-emerald-100 text-emerald-700 px-3 py-1 rounded-lg text-[10px] font-black">Q {parseFloat(v.selling_price).toFixed(2)}</span>
+                        </div>
+                      </div>
+
+                      <div className="relative z-10 text-right space-y-2 ml-4">
+                         <div className="flex gap-1 justify-end">
+                            <span className="bg-orange-500 text-white text-[10px] font-black px-2 py-1 rounded-md">-5%</span>
+                            <span className="bg-orange-600 text-white text-[10px] font-black px-2 py-1 rounded-md">-10%</span>
+                            <span className="bg-rose-600 text-white text-[10px] font-black px-2 py-1 rounded-md">MAX {v.category_max}%</span>
+                         </div>
+                         <p className="text-orange-600 font-black text-xs">AGREGAR AL CARRITO &rarr;</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3611,7 +4045,8 @@ function CustomersView({ auth, customers }) {
     default_address: '',
     notes: ''
   });
-  const { data, setData, post, put, delete: destroy, processing, reset } = customerForm;
+  const { data, setData, post, put, processing, reset } = customerForm;
+  const destroy = customerForm['delete'];
 
   const filteredCustomers = customers.filter(c => 
     c.full_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -3889,7 +4324,8 @@ function SuppliersView({ auth, suppliers }) {
     address: '',
     contact_info: ''
   });
-  const { data, setData, post, put, delete: destroy, processing, reset } = supplierForm;
+  const { data, setData, post, put, processing, reset } = supplierForm;
+  const destroy = supplierForm['delete'];
 
   const filteredSuppliers = suppliers.filter(s => 
     s.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
@@ -4371,12 +4807,14 @@ function ExpensesView({ auth }) {
   
   const categories = ['Publicidad', 'Alquiler', 'Servicios', 'Suministros', 'Transporte', 'Otros'];
   
-  const { data, setData, post, put, delete: destroy, processing, reset } = useForm({
+  const expenseForm = useForm({
     description: '',
     amount: '',
     category: 'Otros',
     expense_date: new Date().toISOString().split('T')[0]
   });
+  const { data, setData, post, put, processing, reset } = expenseForm;
+  const destroy = expenseForm['delete'];
 
   const loadExpenses = async () => {
     setLoading(true);

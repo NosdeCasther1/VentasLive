@@ -10,6 +10,7 @@ class SaleDetail extends Model
         'sale_id',
         'product_variant_id',
         'quantity',
+        'discount',
         'selling_price',
         'historical_cost',
     ];

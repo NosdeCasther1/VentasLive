@@ -70,15 +70,28 @@ class LiveController extends Controller
             }
 
             // 2. Lock and check inventory
-            $variant = ProductVariant::lockForUpdate()->findOrFail($request->variant_id);
+            $variant = ProductVariant::with('product.category')->lockForUpdate()->findOrFail($request->variant_id);
             
             if ($variant->stock < $request->quantity) {
                 return response()->json(['error' => "Stock insuficiente para {$variant->product->name}. Disponible: {$variant->stock}"], 422);
             }
 
+            // Validation: Max discount limit
+            $discount = floatval($request->discount ?? 0);
+            if ($discount > 0 && auth()->user()->role === 'cashier') {
+                $maxPossible = $variant->product->category->max_discount_percent ?? 0;
+                if ($discount > $maxPossible) {
+                    return response()->json(['error' => "El descuento solicitado ($discount%) excede el límite permitido para esta categoría ($maxPossible%)"], 422);
+                }
+            }
+
+            $discountAmount = ($variant->selling_price * ($discount / 100));
+            $finalPrice = $variant->selling_price - $discountAmount;
+
             // 3. Create or update sale detail
             $detail = SaleDetail::where('sale_id', $sale->id)
                 ->where('product_variant_id', $variant->id)
+                ->where('discount', $discount)
                 ->first();
 
             if ($detail) {
@@ -88,6 +101,7 @@ class LiveController extends Controller
                     'sale_id' => $sale->id,
                     'product_variant_id' => $variant->id,
                     'quantity' => $request->quantity,
+                    'discount' => $discount,
                     'selling_price' => $variant->selling_price,
                     'historical_cost' => $variant->average_cost,
                 ]);
@@ -98,7 +112,7 @@ class LiveController extends Controller
             $variant->increment('reserved', $request->quantity);
 
             // 5. Update sale total
-            $sale->increment('total', $variant->selling_price * $request->quantity);
+            $sale->increment('total', $finalPrice * $request->quantity);
 
             // 6. Check for Low Stock Notification
             if ($variant->stock <= 2) {
@@ -112,7 +126,7 @@ class LiveController extends Controller
 
             return response()->json([
                 'message' => 'Producto agregado a la bolsa',
-                'bag' => $sale->load('details.productVariant.product')
+                'bag' => $sale->load('details.productVariant.product.category')
             ]);
         });
     }
@@ -144,7 +158,7 @@ class LiveController extends Controller
             $detail->delete();
 
             // 4. Reload bag to return updated state
-            $sale->load('details.productVariant.product');
+            $sale->load('details.productVariant.product.category');
             
             return response()->json([
                 'message' => 'Producto eliminado de la bolsa',
@@ -155,7 +169,7 @@ class LiveController extends Controller
 
     public function getBags()
     {
-        $bags = Sale::with(['details.productVariant.product'])
+        $bags = Sale::with(['details.productVariant.product.category'])
             ->where('status', 'live_draft')
             ->orderBy('updated_at', 'desc')
             ->get();
@@ -183,16 +197,25 @@ class LiveController extends Controller
         $discount = $request->discount ?? 0;
         $precioFinal = $subtotal - $discount;
 
+        // Reglas de Negocio Anti-Pérdidas con Límite Dinámico por Categoría
+        $maxDiscountAllowed = 0;
+        foreach ($saleDetails as $detail) {
+            $variant = $detail->productVariant;
+            $itemSubtotal = $detail->selling_price * $detail->quantity;
+            $categoryLimit = $variant->product->category->max_discount_percent ?? 0;
+            $maxDiscountAllowed += ($itemSubtotal * ($categoryLimit / 100));
+        }
+
         if ($user->role === 'cashier') {
-            if ($subtotal > 0 && ($discount / $subtotal) > 0.15) {
-                return response()->json(['error' => 'Límite excedido. Los cajeros solo pueden dar hasta un 15% de descuento.'], 403);
+            if ($subtotal > 0 && $discount > ($maxDiscountAllowed + 0.01)) {
+                return response()->json(['error' => "Límite excedido. Para esta combinación de productos, el descuento máximo permitido es Q " . number_format($maxDiscountAllowed, 2)], 403);
             }
             if ($precioFinal < $totalPMP) {
                 return response()->json(['error' => "Alerta de Pérdida: No puedes vender por debajo del costo de inventario (Q " . number_format($totalPMP, 2) . ")."], 403);
             }
         } elseif ($user->role === 'admin') {
-            if ($precioFinal < $totalPMP || ($subtotal > 0 && ($discount / $subtotal) > 0.15)) {
-                \Log::warning("Checkout Live autorizado por admin con pérdida o descuento alto. Usuario: {$user->name}, Venta ID: {$sale->id}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}");
+            if ($precioFinal < $totalPMP || ($subtotal > 0 && $discount > $maxDiscountAllowed)) {
+                \Log::warning("Checkout Live autorizado por admin con pérdida o descuento superior al límite de categoría. Usuario: {$user->name}, Venta ID: {$sale->id}, Total PMP: Q {$totalPMP}, Precio Final: Q {$precioFinal}, Descuento Aplicado: Q {$discount}, Máximo Permitido: Q {$maxDiscountAllowed}");
             }
         }
 
