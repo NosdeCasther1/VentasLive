@@ -1989,25 +1989,49 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
   // Cancel order state
   const [cancellingIds, setCancellingIds] = useState([]);
 
-  const handleCancelOrder = (e, orderId) => {
-    e.stopPropagation();
-    if (!confirm('¿Estás seguro de cancelar esta orden? El inventario será liberado inmediatamente.')) return;
+  const handleCancelOrder = async (e, orderId) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
     
-    setCancellingIds(prev => [...prev, orderId]);
-    
-    router.post(route('logistics.cancel', orderId), {}, {
-      preserveScroll: true,
-      onSuccess: () => {
-        // La animación fade-out se mantiene por el ID en cancellingIds
-        setTimeout(() => {
-          setCancellingIds(prev => prev.filter(id => id !== orderId));
-        }, 500);
-      },
-      onError: () => {
-        setCancellingIds(prev => prev.filter(id => id !== orderId));
-        alert('Error al cancelar el pedido.');
-      }
+    const result = await Swal.fire({
+      title: '¿Anular este pedido?',
+      text: "El inventario será liberado inmediatamente y el pedido se marcará como cancelado.",
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#ef4444',
+      cancelButtonColor: '#64748b',
+      confirmButtonText: 'Sí, anular pedido',
+      cancelButtonText: 'No, mantener'
     });
+
+    if (result.isConfirmed) {
+      setIsUpdating(true);
+      setCancellingIds(prev => [...prev, orderId]);
+      
+      router.post(route('logistics.cancel', orderId), {}, {
+        preserveScroll: true,
+        onSuccess: () => {
+          Swal.fire({
+            icon: 'success',
+            title: 'Pedido Anulado',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 3000
+          });
+          setTimeout(() => {
+            setCancellingIds(prev => prev.filter(id => id !== orderId));
+          }, 500);
+        },
+        onError: (err) => {
+          setCancellingIds(prev => prev.filter(id => id !== orderId));
+          Swal.fire('Error', 'No se pudo cancelar el pedido.', 'error');
+        },
+        onFinish: () => setIsUpdating(false)
+      });
+    }
   };
 
   const handleRevertOrder = async (orderId) => {
@@ -2211,13 +2235,13 @@ function OrdersView({ auth, deliveries = [], setActiveTab, setPosInitialAction }
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center space-x-2">
                           <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-1 rounded">{orderIdStr}</span>
-                          <button 
-                            onClick={(e) => handleCancelOrder(e, order.id)}
-                            className="bg-red-50 text-red-500 hover:bg-red-600 hover:text-white p-1.5 rounded-full opacity-60 group-hover:opacity-100 transition-all shadow-sm flex items-center justify-center"
-                            title="Cancelar Pedido"
-                          >
-                            <XCircle className="w-4 h-4" />
-                          </button>
+                            <button 
+                              onClick={(e) => handleCancelOrder(e, order.id)}
+                              className="bg-red-50 text-red-500 hover:bg-red-600 hover:text-white p-1.5 rounded-full opacity-60 group-hover:opacity-100 transition-all shadow-sm flex items-center justify-center"
+                              title="Cancelar Pedido"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                         </div>
                         <span className="text-xs text-slate-400 flex items-center"><Clock className="w-3 h-3 mr-1" /> {new Date(order.created_at).toLocaleDateString()}</span>
                       </div>
