@@ -286,7 +286,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
       <main className="flex-1 flex flex-col h-full overflow-hidden">
         
         {/* TOP BAR */}
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 z-10">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 z-30">
           <div className="flex items-center text-slate-500">
             <h1 className="text-xl font-bold text-slate-800 capitalize">
               {activeTab === 'live' ? 'Modo de Transmisión (Live)' : activeTab.replace('-', ' ')}
@@ -2316,7 +2316,7 @@ function POSView({ auth, products, customers = [], initialAction, setInitialActi
       );
 
       if (match) {
-        setDuplicateWarning(`¡Atención! Ya existe un cliente con este nombre o teléfono (ID: ${match.id} - ${match.full_name})`);
+        setDuplicateWarning(`¡Registro Encontrado! Ya existe un cliente con este nombre o teléfono (ID: ${match.id} - ${match.full_name})`);
       } else {
         setDuplicateWarning(null);
       }
@@ -3273,9 +3273,12 @@ ${itemsText}
             </div>
             <form onSubmit={handleQuickCustomerSubmit} className="p-6 space-y-4">
               {duplicateWarning && (
-                <div className="bg-amber-50 border border-amber-200 text-amber-700 px-3 py-2 rounded-lg text-[11px] font-bold flex items-center animate-pulse">
-                  <AlertCircle className="w-3.5 h-3.5 mr-2 shrink-0" />
-                  {duplicateWarning}
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-xl flex items-start space-x-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-amber-900 text-xs font-bold leading-tight">{duplicateWarning}</p>
+                    <p className="text-amber-600 text-[10px] mt-1 font-medium italic">El sistema bloqueó el guardado para evitar duplicados. Por favor, selecciónalo desde la lista.</p>
+                  </div>
                 </div>
               )}
               <div>
@@ -3325,8 +3328,8 @@ ${itemsText}
               
               <button 
                 type="submit"
-                disabled={isSavingQuickCustomer}
-                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 text-white font-bold py-3 rounded-xl shadow-md transition-colors flex justify-center items-center text-sm"
+                disabled={isSavingQuickCustomer || !!duplicateWarning}
+                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow-md transition-colors flex justify-center items-center text-sm"
               >
                 {isSavingQuickCustomer ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <UserPlus className="w-5 h-5 mr-2" />}
                 Guardar y Seleccionar
