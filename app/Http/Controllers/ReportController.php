@@ -186,4 +186,71 @@ class ReportController extends Controller
                 ];
             });
     }
+
+    public function liveSummary(Request $request)
+    {
+        $date = $request->query('date', Carbon::today()->format('Y-m-d'));
+        $startOfDay = Carbon::parse($date)->startOfDay();
+        $endOfDay = Carbon::parse($date)->endOfDay();
+
+        // Total_Apartado: Sum of ALL bags created today (live_draft + completed)
+        $totalApartado = Sale::whereBetween('created_at', [$startOfDay, $endOfDay])
+            ->whereIn('status', ['live_draft', 'completed'])
+            ->sum('total');
+
+        // Total_Confirmado: Sum of bags that are completed (sent to logistics)
+        $totalConfirmado = Sale::whereBetween('created_at', [$startOfDay, $endOfDay])
+            ->where('status', 'completed')
+            ->where('shipping_status', '!=', 'cancelled')
+            ->sum('total');
+
+        // Total_Bolsas_Huerfanas: Count of bags still in live_draft
+        $totalHuerfanas = Sale::whereBetween('created_at', [$startOfDay, $endOfDay])
+            ->where('status', 'live_draft')
+            ->count();
+
+        // Top_Clientes: Top 5 by amount spent today
+        $topCustomers = Sale::whereBetween('created_at', [$startOfDay, $endOfDay])
+            ->whereIn('status', ['live_draft', 'completed'])
+            ->select('customer_id', 'social_handle', 'customer_name', DB::raw('SUM(total) as total_spent'))
+            ->groupBy('customer_id', 'social_handle', 'customer_name')
+            ->orderByDesc('total_spent')
+            ->limit(5)
+            ->get()
+            ->map(function($item) {
+                return [
+                    'name' => $item->social_handle ?: ($item->customer_name ?: 'Cliente Genérico'),
+                    'total' => $item->total_spent
+                ];
+            });
+
+        return response()->json([
+            'date' => $date,
+            'total_apartado' => $totalApartado,
+            'total_confirmado' => $totalConfirmado,
+            'total_huerfanas' => $totalHuerfanas,
+            'top_customers' => $topCustomers,
+        ]);
+    }
+
+    public function liveSummaryPdf(Request $request)
+    {
+        $date = $request->query('date', Carbon::today()->format('Y-m-d'));
+        $metricsResponse = $this->liveSummary($request);
+        $metrics = json_decode($metricsResponse->getContent(), true);
+
+        $pdf = Pdf::loadView('reports.live-summary', [
+            'metrics' => $metrics,
+            'date' => Carbon::parse($date)->translatedFormat('d F Y')
+        ]);
+        
+        // Define paper size for thermal printer (80mm width, dynamic height)
+        $pdf->setPaper([0, 0, 226.77, 500], 'portrait'); 
+
+        $fileName = 'Resumen_Live_' . $date . '.pdf';
+        
+        return $pdf->download($fileName)
+            ->header('Content-Type', 'application/pdf')
+            ->header('Content-Disposition', 'attachment; filename="' . $fileName . '"');
+    }
 }

@@ -82,6 +82,8 @@ Route::middleware(['auth'])->group(function () {
         Route::get('api/reports/metrics', [\App\Http\Controllers\ReportController::class, 'metrics'])->name('reports.metrics');
         Route::get('reportes/exportar/pdf', [\App\Http\Controllers\ReportController::class, 'exportPdf'])->name('reports.export.pdf');
         Route::get('reportes/exportar/excel', [\App\Http\Controllers\ReportController::class, 'exportExcel'])->name('reports.export.excel');
+        Route::get('api/reports/live-summary', [\App\Http\Controllers\ReportController::class, 'liveSummary'])->name('reports.live-summary');
+        Route::get('reportes/live-summary/pdf', [\App\Http\Controllers\ReportController::class, 'liveSummaryPdf'])->name('reports.live-summary.pdf');
         Route::get('reports/accounting', [\App\Http\Controllers\AccountingController::class, 'index'])->name('reports.accounting');
         Route::get('api/accounting/diario', [\App\Http\Controllers\AccountingController::class, 'getDiario'])->name('api.accounting.diario');
         Route::get('api/accounting/mayor', [\App\Http\Controllers\AccountingController::class, 'getMayor'])->name('api.accounting.mayor');

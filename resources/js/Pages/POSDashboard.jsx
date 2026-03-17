@@ -52,6 +52,7 @@ import { Head, router, Link, useForm } from '@inertiajs/react';
 import axios from 'axios';
 import Swal from 'sweetalert2';
 import AccountingReports from './Reports/AccountingReports';
+import LiveReport from './Reports/LiveReport';
 import SettingsIndex from './Settings/Index';
 
 export default function POSDashboard({ auth, products, categories, suppliers, customers = [], deliveries = [], analytics = {}, settings = {}, users = [], activeSession = null, bags = [], activeTab: initialTab = 'dashboard' }) {
@@ -170,6 +171,10 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
     }
   };
 
+  const handleGoToLiveSummary = () => {
+    setActiveTab('reporte-live');
+  };
+
   const handleEndLive = async () => {
     if (!currentSession) return;
 
@@ -240,6 +245,14 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
             <>
               <NavItem id="proveedores" label="Proveedores" icon={<Store size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
               <NavItem id="reportes" label="Reportes" icon={<BarChart3 size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
+              <div className="pl-12 space-y-1">
+                <button 
+                  onClick={() => setActiveTab('reporte-live')}
+                  className={`w-full flex items-center px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${activeTab === 'reporte-live' ? 'text-white bg-slate-800' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                  • Resumen de Live
+                </button>
+              </div>
               <NavItem id="contabilidad" label="Libros Contables" icon={<BookOpen size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
               <NavItem id="gastos" label="Control de Gastos" icon={<CreditCard size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
               <NavItem id="configuracion" label="Configuración" icon={<Settings size={20} />} activeTab={activeTab} setActiveTab={setActiveTab} />
@@ -309,7 +322,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 shrink-0 z-30">
           <div className="flex items-center text-slate-500">
             <h1 className="text-xl font-bold text-slate-800 capitalize">
-              {activeTab === 'live' ? 'Modo de Transmisión (Live)' : activeTab.replace('-', ' ')}
+              {activeTab === 'live' ? 'Modo de Transmisión (Live)' : activeTab === 'reporte-live' ? 'Reporte de Resumen de Live' : activeTab.replace('-', ' ')}
             </h1>
           </div>
           <div className="flex items-center space-x-4">
@@ -442,6 +455,7 @@ export default function POSDashboard({ auth, products, categories, suppliers, cu
           {activeTab === 'clientes' && <CustomersView auth={auth} customers={customers} />}
           {activeTab === 'proveedores' && <SuppliersView auth={auth} suppliers={suppliers} />}
           {activeTab === 'reportes' && <ReportsView auth={auth} />}
+          {activeTab === 'reporte-live' && <LiveReport />}
           {activeTab === 'contabilidad' && <AccountingReports auth={auth} />}
           {activeTab === 'gastos' && <ExpensesView auth={auth} />}
           {activeTab === 'configuracion' && <SettingsIndex auth={auth} settings={settings} users={users} />}
@@ -956,12 +970,21 @@ function LiveView({ auth, products, currentSession, sessionTimer, onEndLive, han
             {sessionTimer}
           </div>
           {currentSession ? (
-            <button 
-              onClick={onEndLive}
-              className="px-4 py-1.5 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700 transition-all shadow-sm"
-            >
-              Finalizar Live
-            </button>
+            <div className="flex space-x-2">
+              <button 
+                onClick={handleGoToLiveSummary}
+                className="px-4 py-1.5 bg-indigo-50 text-indigo-600 text-sm font-bold rounded-lg hover:bg-indigo-100 transition-all border border-indigo-100 flex items-center shadow-sm"
+              >
+                <BarChart3 className="w-4 h-4 mr-2" />
+                Resumen Live
+              </button>
+              <button 
+                onClick={onEndLive}
+                className="px-4 py-1.5 bg-red-600 text-white text-sm font-bold rounded-lg hover:bg-red-700 transition-all shadow-sm"
+              >
+                Finalizar Live
+              </button>
+            </div>
           ) : (
             <button 
               onClick={handleStartLive}
